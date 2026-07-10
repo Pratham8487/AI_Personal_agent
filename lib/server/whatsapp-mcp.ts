@@ -3,6 +3,7 @@ import { ensureConnected, getOpenSocket } from "./whatsapp-manager";
 import {
   getChatHistory,
   getContact,
+  getFrequentChats,
   getRecentMessages,
   listGroupsDb,
   recordSentMessage,
@@ -101,6 +102,11 @@ export const WHATSAPP_MCP_TOOLS = [
       },
       required: ["contact"],
     },
+  },
+  {
+    name: "list_frequent_contacts",
+    description: "List the WhatsApp contacts the user messages most often.",
+    inputSchema: { type: "object", properties: { count: countArg(25, 10) } },
   },
   {
     name: "list_groups",
@@ -304,6 +310,10 @@ export async function callWhatsappTool(
                 .join("\n"),
         structured: { contacts },
       };
+    }
+    case "list_frequent_contacts": {
+      const chats = await getFrequentChats(userId, parseCount(args.count, 25, 10));
+      return { text: formatChats(chats), structured: { chats } };
     }
     case "list_groups": {
       const sock = getOpenSocket(userId);

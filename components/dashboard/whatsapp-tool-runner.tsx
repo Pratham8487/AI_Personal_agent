@@ -29,6 +29,13 @@ type Phase = "idle" | "loading" | "done" | "error";
 
 const PAGE_SIZE = 5;
 
+/** What picking a suggestion puts into the input: +number, else the name. */
+function contactFillValue(chat: WaChat): string {
+  return chat.jid.endsWith("@s.whatsapp.net")
+    ? `+${chat.jid.split("@")[0]}`
+    : (chat.name ?? chat.jid);
+}
+
 /** Display label without leaking raw JIDs. */
 function chatLabel(chat: WaChat): string {
   if (chat.name) return chat.name;
@@ -112,7 +119,7 @@ function GroupPicker({
             onClick={() => setOpen(false)}
             className="fixed inset-0 z-10 cursor-default"
           />
-          <div className="absolute top-full z-20 mt-1 w-full rounded-lg border border-zinc-200 bg-white p-1.5 shadow-lg dark:border-white/10 dark:bg-[#17111f]">
+          <div className="relative z-20 mt-1 w-full rounded-lg border border-zinc-200 bg-white p-1.5 shadow-lg dark:border-white/10 dark:bg-[#17111f]">
             <input
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
@@ -228,13 +235,40 @@ export default function WhatsappToolRunner({
   const [values, setValues] = useState<Record<string, string>>({});
   const [groups, setGroups] = useState<WaChat[] | null>(null);
   const [groupsError, setGroupsError] = useState(false);
+  const [contacts, setContacts] = useState<WaChat[] | null>(null);
+  const [suggestFor, setSuggestFor] = useState<string | null>(null);
 
   // Only required string args get inputs; counts fall back to defaults.
   const fields = (tool.inputSchema?.required ?? []).filter(
     (key) => tool.inputSchema?.properties?.[key]?.type === "string",
   );
   const hasGroupField = fields.includes("group");
+  const personFields = fields.filter((field) =>
+    ["to", "chat", "contact"].includes(field),
+  );
   const canRun = fields.every((field) => (values[field] ?? "").trim());
+
+  const suggestionsFor = (field: string): WaChat[] => {
+    if (!contacts) return [];
+    const text = (values[field] ?? "").trim().toLowerCase();
+    if (!text) return contacts;
+    const digits = text.replace(/\D/g, "");
+    return contacts.filter(
+      (contact) =>
+        contact.name?.toLowerCase().includes(text) ||
+        (digits.length > 2 && contact.jid.startsWith(digits)),
+    );
+  };
+
+  const loadContacts = () => {
+    callWhatsappMcpBatch(userId, [{ name: "list_frequent_contacts" }])
+      .then(([res]) => {
+        const chats = res.ok ? (parseWaChats(res.structured) ?? []) : [];
+        // A nameless privacy JID has nothing readable to suggest.
+        setContacts(chats.filter((c) => c.name || !c.jid.endsWith("@lid")));
+      })
+      .catch(() => setContacts([]));
+  };
 
   const loadGroups = () => {
     callWhatsappMcpBatch(userId, [{ name: "list_groups" }])
@@ -270,6 +304,7 @@ export default function WhatsappToolRunner({
     if (!expanded) {
       if (phase === "idle" && fields.length === 0) run();
       if (hasGroupField && groups === null && !groupsError) loadGroups();
+      if (personFields.length > 0 && contacts === null) loadContacts();
     }
     onToggle();
   };
@@ -328,6 +363,60 @@ export default function WhatsappToolRunner({
                     rows={3}
                     className={inputClass}
                   />
+                ) : personFields.includes(field) ? (
+                  <div key={field} className="relative">
+                    <input
+                      value={values[field] ?? ""}
+                      onChange={(e) =>
+                        setValues((prev) => ({ ...prev, [field]: e.target.value }))
+                      }
+                      onFocus={() => setSuggestFor(field)}
+                      onBlur={() =>
+                        setTimeout(
+                          () =>
+                            setSuggestFor((current) =>
+                              current === field ? null : current,
+                            ),
+                          150,
+                        )
+                      }
+                      placeholder={
+                        tool.inputSchema?.properties?.[field]?.description ?? field
+                      }
+                      className={inputClass}
+                    />
+                    {suggestFor === field &&
+                      suggestionsFor(field).length > 0 && (
+                        <ul className="no-scrollbar mt-1 max-h-44 w-full overflow-y-auto rounded-lg border border-zinc-200 bg-white p-1.5 shadow-lg dark:border-white/10 dark:bg-[#17111f]">
+                          {suggestionsFor(field).map((contact) => (
+                            <li key={contact.jid}>
+                              <button
+                                type="button"
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  setValues((prev) => ({
+                                    ...prev,
+                                    [field]: contactFillValue(contact),
+                                  }));
+                                  setSuggestFor(null);
+                                }}
+                                className="flex w-full items-baseline justify-between gap-3 rounded-md px-2.5 py-1.5 text-left text-sm text-zinc-900 transition-colors hover:bg-zinc-100 dark:text-white dark:hover:bg-white/5"
+                              >
+                                <span className="break-words">
+                                  {contact.name ?? contactFillValue(contact)}
+                                </span>
+                                {contact.name &&
+                                  contact.jid.endsWith("@s.whatsapp.net") && (
+                                    <span className="shrink-0 text-xs text-zinc-500 dark:text-zinc-400">
+                                      +{contact.jid.split("@")[0]}
+                                    </span>
+                                  )}
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                  </div>
                 ) : (
                   <input
                     key={field}

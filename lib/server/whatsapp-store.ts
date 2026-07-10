@@ -342,17 +342,52 @@ const MESSAGE_SELECT = `
   LEFT JOIN public.whatsapp_contacts sct
     ON sct.user_id = m.user_id AND sct.jid = m.sender_jid`;
 
+/**
+ * History-sync messages often lack a push name while live messages from
+ * the same sender carry one; borrow the latest known name per sender so
+ * group transcripts don't show "Unknown".
+ */
+async function fillSenderNames(
+  userId: string,
+  rows: StoredMessage[],
+): Promise<StoredMessage[]> {
+  const missing = [
+    ...new Set(
+      rows
+        .filter((row) => !row.sender_name && !row.from_me && row.sender_jid)
+        .map((row) => row.sender_jid as string),
+    ),
+  ];
+  if (missing.length === 0) return rows;
+  const placeholders = missing.map((_, i) => `$${i + 2}`).join(", ");
+  const known = await adminSql<{ sender_jid: string; sender_name: string }>(
+    `SELECT DISTINCT ON (sender_jid) sender_jid, sender_name
+     FROM public.whatsapp_messages
+     WHERE user_id = $1 AND sender_jid IN (${placeholders}) AND sender_name IS NOT NULL
+     ORDER BY sender_jid, sent_at DESC`,
+    [userId, ...missing],
+  );
+  if (known.length === 0) return rows;
+  const names = new Map(known.map((row) => [row.sender_jid, row.sender_name]));
+  return rows.map((row) =>
+    row.sender_name || !row.sender_jid
+      ? row
+      : { ...row, sender_name: names.get(row.sender_jid) ?? null },
+  );
+}
+
 export async function getRecentMessages(
   userId: string,
   count: number,
 ): Promise<StoredMessage[]> {
-  return adminSql<StoredMessage>(
+  const rows = await adminSql<StoredMessage>(
     `${MESSAGE_SELECT}
      WHERE m.user_id = $1
      ORDER BY m.sent_at DESC
      LIMIT $2`,
     [userId, count],
   );
+  return fillSenderNames(userId, rows);
 }
 
 export async function getChatHistory(
@@ -367,13 +402,14 @@ export async function getChatHistory(
     params.push(before);
     filter = "AND m.sent_at < $4::timestamptz";
   }
-  return adminSql<StoredMessage>(
+  const rows = await adminSql<StoredMessage>(
     `${MESSAGE_SELECT}
      WHERE m.user_id = $1 AND m.chat_jid = $2 ${filter}
      ORDER BY m.sent_at DESC
      LIMIT $3`,
     params,
   );
+  return fillSenderNames(userId, rows);
 }
 
 function likePattern(term: string): string {
@@ -409,6 +445,31 @@ export async function searchChats(
      ORDER BY t.last_message_at DESC NULLS LAST, t.name
      LIMIT $3`,
     [userId, likePattern(query), count],
+  );
+}
+
+/** Individual chats ranked by message volume — "frequently contacted". */
+export async function getFrequentChats(
+  userId: string,
+  count: number,
+): Promise<ChatSummary[]> {
+  return adminSql<ChatSummary>(
+    `SELECT m.chat_jid AS jid,
+            COALESCE(c.name, ct.name, ct.notify) AS name,
+            false AS is_group,
+            to_char(max(m.sent_at) AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS last_message_at
+     FROM public.whatsapp_messages m
+     LEFT JOIN public.whatsapp_chats c
+       ON c.user_id = m.user_id AND c.jid = m.chat_jid
+     LEFT JOIN public.whatsapp_contacts ct
+       ON ct.user_id = m.user_id AND ct.jid = m.chat_jid
+     WHERE m.user_id = $1 AND m.chat_jid NOT LIKE '%@g.us'
+       AND (m.chat_jid NOT LIKE '%@lid'
+            OR COALESCE(c.name, ct.name, ct.notify) IS NOT NULL)
+     GROUP BY m.chat_jid, c.name, ct.name, ct.notify
+     ORDER BY count(*) DESC
+     LIMIT $2`,
+    [userId, count],
   );
 }
 
