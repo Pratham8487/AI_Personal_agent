@@ -10,11 +10,6 @@ import {
   WhatsAppIcon,
 } from "@/components/landing/icons";
 
-export type StaticAction = {
-  name: string;
-  description: string;
-};
-
 export type Provider = {
   id:
     | "gmail"
@@ -30,7 +25,6 @@ export type Provider = {
   Icon: ComponentType<SVGProps<SVGSVGElement>>;
   brandClass: string;
   hasLiveTools: boolean;
-  staticActions: StaticAction[];
 };
 
 export const STATUS_CONNECTED = "connected";
@@ -43,11 +37,6 @@ export const PROVIDERS: Provider[] = [
     Icon: GmailIcon,
     brandClass: "text-[#EA4335]",
     hasLiveTools: true,
-    staticActions: [
-      { name: "Fetch emails", description: "Read recent messages from your inbox." },
-      { name: "Search inbox", description: "Find emails by sender, subject, or content." },
-      { name: "Draft replies", description: "Compose reply drafts for your review." },
-    ],
   },
   {
     id: "google-calendar",
@@ -56,11 +45,6 @@ export const PROVIDERS: Provider[] = [
     Icon: CalendarIcon,
     brandClass: "text-[#4285F4]",
     hasLiveTools: false,
-    staticActions: [
-      { name: "List events", description: "Read upcoming meetings for your briefing." },
-      { name: "Create event", description: "Schedule meetings suggested by the AI agent." },
-      { name: "Detect conflicts", description: "Flag overlapping meetings before they happen." },
-    ],
   },
   {
     id: "whatsapp",
@@ -69,11 +53,6 @@ export const PROVIDERS: Provider[] = [
     Icon: WhatsAppIcon,
     brandClass: "text-[#25D366]",
     hasLiveTools: false,
-    staticActions: [
-      { name: "Summarize chats", description: "Condense busy group chats into recaps." },
-      { name: "Detect commitments", description: "Turn \"I'll send it Friday\" into reminders." },
-      { name: "Priority pings", description: "Surface messages that need a reply today." },
-    ],
   },
   {
     id: "slack",
@@ -82,11 +61,6 @@ export const PROVIDERS: Provider[] = [
     Icon: SlackIcon,
     brandClass: "text-[#E01E5A]",
     hasLiveTools: false,
-    staticActions: [
-      { name: "List unread mentions", description: "Collect @-mentions across channels." },
-      { name: "Search messages", description: "Find workspace messages by keyword." },
-      { name: "Send message", description: "Post replies to channels or DMs." },
-    ],
   },
   {
     id: "outlook",
@@ -95,11 +69,6 @@ export const PROVIDERS: Provider[] = [
     Icon: OutlookIcon,
     brandClass: "text-[#0078D4]",
     hasLiveTools: false,
-    staticActions: [
-      { name: "Fetch emails", description: "Read recent messages from your work inbox." },
-      { name: "List events", description: "Pull calendar items into your briefing." },
-      { name: "Draft replies", description: "Compose reply drafts for your review." },
-    ],
   },
   {
     id: "discord",
@@ -108,11 +77,6 @@ export const PROVIDERS: Provider[] = [
     Icon: DiscordIcon,
     brandClass: "text-[#5865F2]",
     hasLiveTools: false,
-    staticActions: [
-      { name: "Summarize servers", description: "Recap active channels you follow." },
-      { name: "List mentions", description: "Collect pings and replies that need you." },
-      { name: "Send message", description: "Reply to channels or DMs." },
-    ],
   },
   {
     id: "linkedin",
@@ -121,11 +85,6 @@ export const PROVIDERS: Provider[] = [
     Icon: LinkedInIcon,
     brandClass: "text-[#0A66C2]",
     hasLiveTools: false,
-    staticActions: [
-      { name: "List messages", description: "Surface InMail and DMs worth answering." },
-      { name: "Review invitations", description: "Summarize pending connection requests." },
-      { name: "Draft replies", description: "Compose professional responses for review." },
-    ],
   },
   {
     id: "telegram",
@@ -134,10 +93,5 @@ export const PROVIDERS: Provider[] = [
     Icon: TelegramIcon,
     brandClass: "text-[#26A5E4]",
     hasLiveTools: false,
-    staticActions: [
-      { name: "Summarize channels", description: "Digest busy channels into highlights." },
-      { name: "Detect follow-ups", description: "Track promises made in chats." },
-      { name: "Send message", description: "Reply to chats and groups." },
-    ],
   },
 ];

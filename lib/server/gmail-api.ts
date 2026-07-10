@@ -24,6 +24,10 @@ export const GMAIL_TOOLS = [
     name: "get_profile",
     description: "Read the connected account's email address and message counts.",
   },
+  {
+    name: "count_messages",
+    description: "Count messages matching a Gmail query (exact up to 1,000).",
+  },
 ];
 
 async function gmailFetch<T>(
@@ -66,11 +70,18 @@ type MessageMeta = {
   payload?: { headers?: { name: string; value: string }[] };
 };
 
+export type EmailSummary = {
+  from: string;
+  subject: string;
+  date: string;
+  snippet: string;
+};
+
 export async function fetchEmails(
   userId: string,
   count: number,
   query?: string,
-): Promise<{ tool: string; preview: string }> {
+): Promise<{ tool: string; preview: string; messages: EmailSummary[] }> {
   const token = await getValidAccessToken(userId);
   const tool = query ? "search_inbox" : "read_emails";
   const params = new URLSearchParams({ maxResults: String(count) });
@@ -88,10 +99,11 @@ export async function fetchEmails(
     return {
       tool,
       preview: query ? "No messages matched your search." : "Your inbox is empty.",
+      messages: [],
     };
   }
 
-  const messages = await Promise.all(
+  const metas = await Promise.all(
     ids.map((id) =>
       gmailFetch<MessageMeta>(
         token,
@@ -100,23 +112,59 @@ export async function fetchEmails(
     ),
   );
 
+  const messages = metas.map((message) => {
+    const headers = message.payload?.headers ?? [];
+    const header = (name: string) =>
+      headers.find((h) => h.name.toLowerCase() === name.toLowerCase())
+        ?.value ?? "";
+    return {
+      from: header("From"),
+      subject: header("Subject"),
+      date: header("Date"),
+      snippet: message.snippet ?? "",
+    };
+  });
+
   const preview = messages
     .map((message) => {
-      const headers = message.payload?.headers ?? [];
-      const header = (name: string) =>
-        headers.find((h) => h.name.toLowerCase() === name.toLowerCase())
-          ?.value ?? "";
       const lines = [
-        `From:    ${header("From")}`,
-        `Subject: ${header("Subject")}`,
-        `Date:    ${header("Date")}`,
+        `From:    ${message.from}`,
+        `Subject: ${message.subject}`,
+        `Date:    ${message.date}`,
       ];
       if (message.snippet) lines.push(`         ${message.snippet}`);
       return lines.join("\n");
     })
     .join("\n\n");
 
-  return { tool, preview };
+  return { tool, preview, messages };
+}
+
+export const COUNT_CAP = 1000;
+
+/**
+ * Counts real message ids by paging the list endpoint —
+ * Gmail's resultSizeEstimate is a rough guess (it plateaus around 201),
+ * so it must not be shown to users.
+ */
+export async function countMessages(
+  userId: string,
+  query: string,
+): Promise<{ count: number; capped: boolean }> {
+  const token = await getValidAccessToken(userId);
+  let count = 0;
+  let pageToken: string | undefined;
+  do {
+    const params = new URLSearchParams({ maxResults: "500", q: query });
+    if (pageToken) params.set("pageToken", pageToken);
+    const result = await gmailFetch<{
+      messages?: { id: string }[];
+      nextPageToken?: string;
+    }>(token, `/messages?${params}`);
+    count += result.messages?.length ?? 0;
+    pageToken = result.nextPageToken;
+  } while (pageToken && count < COUNT_CAP);
+  return { count: Math.min(count, COUNT_CAP), capped: Boolean(pageToken) };
 }
 
 export async function sendEmail(

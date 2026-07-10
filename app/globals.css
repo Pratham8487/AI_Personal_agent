@@ -78,6 +78,44 @@ body {
   box-shadow: 0 4px 32px rgb(139 92 246 / 0.15);
 }
 
+.glass-connected {
+  position: relative;
+  border-color: rgb(16 185 129 / 0.45);
+  box-shadow:
+    0 0 0 1px rgb(16 185 129 / 0.2),
+    0 8px 32px rgb(16 185 129 / 0.18);
+}
+.dark .glass-connected {
+  border-color: rgb(16 185 129 / 0.45);
+  box-shadow:
+    0 0 0 1px rgb(16 185 129 / 0.2),
+    0 8px 40px rgb(16 185 129 / 0.28);
+}
+.glass-connected.glass-hover:hover {
+  border-color: rgb(16 185 129 / 0.65);
+  box-shadow:
+    0 0 0 1px rgb(16 185 129 / 0.3),
+    0 8px 40px rgb(16 185 129 / 0.3);
+}
+.glass-connected::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: 0 0 28px rgb(16 185 129 / 0.3);
+  opacity: 0.4;
+  pointer-events: none;
+  animation: connected-breathe 2.5s ease-in-out infinite alternate;
+}
+@keyframes connected-breathe {
+  from {
+    opacity: 0.25;
+  }
+  to {
+    opacity: 0.9;
+  }
+}
+
 .bg-mesh {
   background-image:
     radial-gradient(at 15% 0%, rgb(139 92 246 / 0.07) 0, transparent 50%),
@@ -184,7 +222,8 @@ button:not(:disabled):active {
   .aurora-blob,
   .skeleton::after,
   .typing-dot,
-  .chart-bar {
+  .chart-bar,
+  .glass-connected::after {
     animation: none;
   }
   .glass-hover:hover {

@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef } from "react";
 import { XIcon } from "@/components/landing/icons";
+import { useEffect, useRef } from "react";
 
 export default function Modal({
   title,
@@ -26,10 +26,7 @@ export default function Modal({
         e.preventDefault();
         onClose();
       }}
-      onClick={(e) => {
-        if (e.target === ref.current) onClose();
-      }}
-      className="glass-card m-auto w-full max-w-lg bg-white p-0 text-zinc-900 backdrop:bg-black/50 backdrop:backdrop-blur-sm dark:bg-[#17111f] dark:text-zinc-100"
+      className="glass-card m-auto w-full max-w-lg bg-white! p-0 text-zinc-900 backdrop:bg-black/40 backdrop:backdrop-blur-md dark:bg-[#17111f]! dark:text-zinc-100"
     >
       <div className="max-h-[85vh] overflow-y-auto p-6">
         <div className="mb-5 flex items-start justify-between gap-3">

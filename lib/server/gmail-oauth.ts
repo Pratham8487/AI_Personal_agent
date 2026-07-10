@@ -121,10 +121,27 @@ export function exchangeCode(
   });
 }
 
+/**
+ * The client mirrors auth users into public.users after sign-in, but that
+ * sync can fail (e.g. a timeout). gmail_oauth_tokens references
+ * public.users, so guarantee the row exists before saving tokens.
+ */
+async function ensureUserRecord(userId: string): Promise<void> {
+  await adminSql(
+    `INSERT INTO public.users (id, email, name, email_verified)
+     SELECT a.id, a.email, a.profile->>'name', a.email_verified
+     FROM auth.users a
+     WHERE a.id = $1
+     ON CONFLICT (id) DO NOTHING`,
+    [userId],
+  );
+}
+
 export async function saveTokens(
   userId: string,
   tokens: TokenResponse,
 ): Promise<void> {
+  await ensureUserRecord(userId);
   await adminSql(
     `INSERT INTO public.gmail_oauth_tokens (user_id, access_token, refresh_token, expires_at, scope)
      VALUES ($1, $2, $3, now() + ($4 || ' seconds')::interval, $5)

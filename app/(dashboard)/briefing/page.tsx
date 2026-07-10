@@ -1,86 +1,71 @@
-import Badge, { type BadgeTone } from "@/components/dashboard/badge";
+"use client";
+
 import Card from "@/components/dashboard/card";
+import GmailConnectCard from "@/components/dashboard/gmail-connect-card";
+import GmailEmailList from "@/components/dashboard/gmail-email-list";
 import PageHeader from "@/components/dashboard/page-header";
-
-const emails: { source: string; text: string; tag: string; tone: BadgeTone }[] = [
-  {
-    source: "Gmail · Finance team",
-    text: "Q3 budget approved — final headcount plan due Friday.",
-    tag: "Action needed",
-    tone: "amber",
-  },
-  {
-    source: "Outlook · Acme Corp",
-    text: "Pricing change on your plan effective August 1.",
-    tag: "Important",
-    tone: "rose",
-  },
-];
-
-const meetings = [
-  { time: "9:30 AM", title: "Design sync with Priya", source: "Google Calendar" },
-  { time: "1:00 PM", title: "1:1 with manager", source: "Outlook" },
-  { time: "4:00 PM", title: "Q3 budget review", source: "Google Calendar" },
-];
-
-const followUps = [
-  { text: "Send deck to Alex — promised for Friday.", status: "2 days waiting" },
-  { text: "Reply to vendor contract question.", status: "1 day waiting" },
-  { text: "Confirm Lisbon Airbnb with the trip group.", status: "Due tonight" },
-  { text: "Call the dentist — 2 PM slot on hold.", status: "Due today" },
-];
+import { formatCountStat } from "@/lib/gmail-mcp-client";
+import { STATUS_CONNECTED } from "@/lib/integrations";
+import { useCurrentUser } from "@/lib/use-current-user";
+import { useGmailData } from "@/lib/use-gmail-data";
+import { useIntegrations } from "@/lib/use-integrations";
+import { useToday } from "@/lib/use-today";
 
 export default function BriefingPage() {
+  const { user, isLoaded } = useCurrentUser();
+  const { statuses, isLoading } = useIntegrations(user?.id);
+  const gmailConnected = statuses.gmail?.status === STATUS_CONNECTED;
+  const gmail = useGmailData(user?.id, gmailConnected);
+  const today = useToday();
+
+  const description = [
+    `Your morning digest${today ? ` for ${today}` : ""}.`,
+    gmail.profile ? `Connected as ${gmail.profile.emailAddress}.` : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   return (
     <>
-      <PageHeader
-        title="Briefing"
-        description="Your morning digest for Thursday, July 9."
-      />
-      <div className="grid gap-4 xl:grid-cols-2">
-        <Card title="Important emails" subtitle="2 need replies today">
-          <ul className="space-y-4">
-            {emails.map((email) => (
-              <li key={email.text} className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400">{email.source}</p>
-                  <p className="mt-0.5 text-sm text-zinc-700 dark:text-zinc-200">{email.text}</p>
-                </div>
-                <Badge tone={email.tone}>{email.tag}</Badge>
-              </li>
-            ))}
-          </ul>
-        </Card>
-        <Card title="Today's meetings" subtitle="3 on your calendar">
-          <ul className="space-y-4">
-            {meetings.map((meeting) => (
-              <li key={meeting.title} className="flex items-center gap-3">
-                <span className="w-16 shrink-0 text-xs font-semibold text-zinc-900 dark:text-white">
-                  {meeting.time}
-                </span>
-                <div>
-                  <p className="text-sm text-zinc-700 dark:text-zinc-200">{meeting.title}</p>
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400">{meeting.source}</p>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </Card>
-        <Card
-          title="Pending follow-ups"
-          subtitle="4 commitments Aster is tracking"
-          className="xl:col-span-2"
-        >
-          <ul className="space-y-4">
-            {followUps.map((f) => (
-              <li key={f.text} className="flex items-start justify-between gap-3">
-                <p className="text-sm text-zinc-700 dark:text-zinc-200">{f.text}</p>
-                <Badge tone="amber">{f.status}</Badge>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      </div>
+      <PageHeader title="Briefing" description={description} />
+      {!isLoaded || (user && isLoading) ? (
+        <div className="grid gap-4 xl:grid-cols-2">
+          <div className="skeleton h-56 rounded-3xl" />
+          <div className="skeleton h-56 rounded-3xl" />
+        </div>
+      ) : !user ? (
+        <GmailConnectCard variant="sign-in" className="mx-auto max-w-md" />
+      ) : !gmailConnected ? (
+        <GmailConnectCard variant="connect" className="mx-auto max-w-md" />
+      ) : (
+        <div className="grid gap-4 xl:grid-cols-2">
+          <Card
+            title="Important emails"
+            subtitle={
+              gmail.status === "ready" && gmail.unreadCount.count > 0
+                ? `${formatCountStat(gmail.unreadCount)} unread`
+                : "Latest from your inbox"
+            }
+          >
+            <GmailEmailList
+              status={gmail.status}
+              emails={gmail.emails}
+              error={gmail.error}
+              onRetry={gmail.retry}
+              emptyText="Your inbox is empty."
+            />
+          </Card>
+          <Card title="Pending follow-ups" subtitle="Unread for more than 2 days">
+            <GmailEmailList
+              status={gmail.status}
+              emails={gmail.awaiting}
+              error={gmail.error}
+              onRetry={gmail.retry}
+              emptyText="Nothing waiting on you. Nice work!"
+            />
+          </Card>
+        </div>
+      )}
     </>
   );
 }

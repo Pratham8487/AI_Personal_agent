@@ -1,16 +1,7 @@
-const data = [
-  { day: "Mon", value: 42 },
-  { day: "Tue", value: 58 },
-  { day: "Wed", value: 37 },
-  { day: "Thu", value: 71 },
-  { day: "Fri", value: 64 },
-  { day: "Sat", value: 29 },
-  { day: "Sun", value: 48 },
-];
+export type ActivityDatum = { day: string; value: number };
 
-const max = Math.max(...data.map((d) => d.value));
-
-export default function ActivityChart() {
+export default function ActivityChart({ data }: { data: ActivityDatum[] }) {
+  const max = Math.max(1, ...data.map((d) => d.value));
   return (
     <div className="flex h-40 items-end gap-3">
       {data.map((d, i) => (

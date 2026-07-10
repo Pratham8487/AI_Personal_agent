@@ -1,3 +1,5 @@
+"use client";
+
 import {
   Calendar03Icon,
   Clock01Icon,
@@ -5,58 +7,65 @@ import {
   MessageMultiple01Icon,
 } from "@hugeicons/core-free-icons";
 import ActivityChart from "@/components/dashboard/activity-chart";
-import Badge, { type BadgeTone } from "@/components/dashboard/badge";
 import Card from "@/components/dashboard/card";
+import GmailConnectCard from "@/components/dashboard/gmail-connect-card";
+import GmailEmailList from "@/components/dashboard/gmail-email-list";
 import PageHeader from "@/components/dashboard/page-header";
 import StatCard from "@/components/dashboard/stat-card";
-
-const stats = [
-  { label: "Meetings today", value: "3", icon: Calendar03Icon, iconBg: "bg-indigo-500 shadow-indigo-500/40" },
-  { label: "Important emails", value: "2", icon: Mail01Icon, iconBg: "bg-rose-500 shadow-rose-500/40" },
-  { label: "Follow-ups pending", value: "4", icon: Clock01Icon, iconBg: "bg-amber-500 shadow-amber-500/40" },
-  { label: "Priority messages", value: "7", icon: MessageMultiple01Icon, iconBg: "bg-violet-500 shadow-violet-500/40" },
-];
-
-const briefing: { source: string; text: string; tag: string; tone: BadgeTone }[] = [
-  {
-    source: "Gmail · Finance team",
-    text: "Q3 budget approved. Priya needs your final headcount plan by Friday.",
-    tag: "Action needed",
-    tone: "amber",
-  },
-  {
-    source: "WhatsApp · Family",
-    text: "Trip group settled on Lisbon, Oct 12–16. Confirm the Airbnb by tonight.",
-    tag: "FYI",
-    tone: "zinc",
-  },
-  {
-    source: "Slack · #engineering",
-    text: "Daily standup moved to 10:30 AM starting tomorrow.",
-    tag: "Update",
-    tone: "indigo",
-  },
-];
-
-const alerts: { text: string; time: string; tone: BadgeTone; severity: string }[] = [
-  { text: "Pricing change mentioned in Acme email thread.", time: "2h ago", tone: "rose", severity: "High" },
-  { text: "Invoice #482 due tomorrow — mentioned in Outlook.", time: "4h ago", tone: "amber", severity: "Medium" },
-];
-
-const suggestions: { text: string; action: string }[] = [
-  { text: "Schedule meeting with Alex — tomorrow 11:00 AM.", action: "Confirm" },
-  { text: "Reply to Sarah about the contract — due 3:00 PM.", action: "Draft" },
-  { text: "Pay the electricity bill — due tomorrow.", action: "Remind me" },
-];
-
-const followUps: { text: string; waiting: string }[] = [
-  { text: "Deck for Friday's review — promised to Alex.", waiting: "2 days" },
-  { text: "Reply to vendor contract question.", waiting: "1 day" },
-  { text: "Confirm dentist appointment — 2 PM slot.", waiting: "5 hours" },
-  { text: "Send Mom the birthday plan draft.", waiting: "3 hours" },
-];
+import { formatCountStat } from "@/lib/gmail-mcp-client";
+import { STATUS_CONNECTED } from "@/lib/integrations";
+import { useCurrentUser } from "@/lib/use-current-user";
+import { useGmailData } from "@/lib/use-gmail-data";
+import { useIntegrations } from "@/lib/use-integrations";
+import { useToday } from "@/lib/use-today";
 
 export default function DashboardPage() {
+  const { user, isLoaded } = useCurrentUser();
+  const { statuses, isLoading } = useIntegrations(user?.id);
+  const gmailConnected = statuses.gmail?.status === STATUS_CONNECTED;
+  const gmail = useGmailData(user?.id, gmailConnected);
+  const gatesLoading = !isLoaded || Boolean(user && isLoading);
+  const today = useToday();
+
+  // null → still loading (skeleton tile); "—" → no live data available.
+  const liveStat = (value: string): string | null => {
+    if (gatesLoading || (gmailConnected && gmail.status !== "ready" && gmail.status !== "error")) {
+      return null;
+    }
+    if (!user || !gmailConnected || gmail.status !== "ready") return "—";
+    return value;
+  };
+
+  const emailsToday = gmail.weekly[6]?.value ?? 0;
+  const stats = [
+    {
+      label: "Emails today",
+      value: liveStat(emailsToday.toLocaleString("en-US")),
+      icon: Calendar03Icon,
+      iconBg: "bg-indigo-500 shadow-indigo-500/40",
+    },
+    {
+      label: "Unread emails",
+      value: liveStat(formatCountStat(gmail.unreadCount)),
+      icon: Mail01Icon,
+      iconBg: "bg-rose-500 shadow-rose-500/40",
+    },
+    {
+      label: "Awaiting your reply",
+      value: liveStat(formatCountStat(gmail.awaitingCount)),
+      icon: Clock01Icon,
+      iconBg: "bg-amber-500 shadow-amber-500/40",
+    },
+    {
+      label: "Inbox messages",
+      value: liveStat(
+        gmail.profile ? gmail.profile.messagesTotal.toLocaleString("en-US") : "—",
+      ),
+      icon: MessageMultiple01Icon,
+      iconBg: "bg-violet-500 shadow-violet-500/40",
+    },
+  ];
+
   return (
     <>
       <PageHeader
@@ -64,69 +73,79 @@ export default function DashboardPage() {
         description="Welcome back. Here's what's happening across your inboxes."
       />
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {stats.map((stat) => (
-          <StatCard key={stat.label} {...stat} />
-        ))}
+        {stats.map((stat) =>
+          stat.value === null ? (
+            <div key={stat.label} className="skeleton h-24 rounded-3xl" />
+          ) : (
+            <StatCard key={stat.label} {...stat} value={stat.value} />
+          ),
+        )}
       </div>
       <div className="mt-4 grid gap-4 xl:grid-cols-2">
         <Card
           title="Weekly activity"
-          subtitle="Messages processed across your accounts"
+          subtitle="Emails received per day"
           className="xl:col-span-2"
         >
-          <ActivityChart />
+          {gmailConnected && gmail.status === "ready" ? (
+            <ActivityChart data={gmail.weekly} />
+          ) : gmailConnected && gmail.status === "loading" ? (
+            <div className="skeleton h-40 rounded-xl" />
+          ) : (
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+              Connect Gmail to see your weekly email activity.
+            </p>
+          )}
         </Card>
-        <Card title="Today's briefing" subtitle="Thursday, July 9">
-          <ul className="space-y-4">
-            {briefing.map((item) => (
-              <li key={item.text} className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400">{item.source}</p>
-                  <p className="mt-0.5 text-sm text-zinc-700 dark:text-zinc-200">{item.text}</p>
-                </div>
-                <Badge tone={item.tone}>{item.tag}</Badge>
-              </li>
-            ))}
-          </ul>
-        </Card>
-        <Card title="Important alerts" subtitle="Triggered by your alert rules">
-          <ul className="space-y-4">
-            {alerts.map((alert) => (
-              <li key={alert.text} className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm text-zinc-700 dark:text-zinc-200">{alert.text}</p>
-                  <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">{alert.time}</p>
-                </div>
-                <Badge tone={alert.tone}>{alert.severity}</Badge>
-              </li>
-            ))}
-          </ul>
-        </Card>
-        <Card title="AI suggestions" subtitle="Actions Aster can take for you">
-          <ul className="space-y-3">
-            {suggestions.map((s) => (
-              <li key={s.text} className="flex items-center justify-between gap-3">
-                <p className="text-sm text-zinc-700 dark:text-zinc-200">{s.text}</p>
-                <button
-                  type="button"
-                  className="shrink-0 rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-white/10 dark:text-zinc-300 dark:hover:bg-white/5"
-                >
-                  {s.action}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </Card>
-        <Card title="Pending follow-ups" subtitle="Waiting on your response">
-          <ul className="space-y-4">
-            {followUps.map((f) => (
-              <li key={f.text} className="flex items-start justify-between gap-3">
-                <p className="text-sm text-zinc-700 dark:text-zinc-200">{f.text}</p>
-                <Badge tone="amber">{f.waiting}</Badge>
-              </li>
-            ))}
-          </ul>
-        </Card>
+        {gatesLoading ? (
+          <>
+            <div className="skeleton h-56 rounded-3xl" />
+            <div className="skeleton h-56 rounded-3xl" />
+          </>
+        ) : !user || !gmailConnected ? (
+          <GmailConnectCard
+            variant={user ? "connect" : "sign-in"}
+            className="xl:col-span-2"
+          />
+        ) : (
+          <>
+            <Card
+              title="Today's briefing"
+              subtitle={today ?? "Latest from Gmail"}
+            >
+              <GmailEmailList
+                status={gmail.status}
+                emails={gmail.emails.slice(0, 3)}
+                error={gmail.error}
+                onRetry={gmail.retry}
+                emptyText="Your inbox is empty."
+              />
+            </Card>
+            <Card title="Important alerts" subtitle="Unread messages from Gmail">
+              <GmailEmailList
+                status={gmail.status}
+                emails={gmail.unread.slice(0, 3)}
+                error={gmail.error}
+                onRetry={gmail.retry}
+                emptyText="No unread emails."
+                badgeLabel="Unread"
+              />
+            </Card>
+            <Card
+              title="Pending follow-ups"
+              subtitle="Unread for more than 2 days"
+              className="xl:col-span-2"
+            >
+              <GmailEmailList
+                status={gmail.status}
+                emails={gmail.awaiting}
+                error={gmail.error}
+                onRetry={gmail.retry}
+                emptyText="Nothing waiting on you. Nice work!"
+              />
+            </Card>
+          </>
+        )}
       </div>
     </>
   );
