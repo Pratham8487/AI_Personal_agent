@@ -170,6 +170,15 @@ body {
     transparent
   );
 }
+
+/* Keeps an element scrollable while hiding its scrollbar. */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
 @keyframes shimmer {
   to {
     transform: translateX(100%);

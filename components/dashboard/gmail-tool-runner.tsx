@@ -11,6 +11,7 @@ import {
   parseProfile,
   type GmailMcpResult,
 } from "@/lib/gmail-mcp-client";
+import { toolTitle } from "@/lib/tool-title";
 
 export type McpTool = { name: string; description?: string };
 
@@ -162,8 +163,8 @@ export default function GmailToolRunner({
         aria-expanded={expanded}
       >
         <span className="min-w-0">
-          <span className="block font-mono text-sm font-medium text-zinc-900 dark:text-white">
-            {tool.name}
+          <span className="block text-sm font-semibold text-zinc-900 dark:text-white">
+            {toolTitle(tool.name)}
           </span>
           {tool.description && (
             <span className="mt-0.5 block text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">

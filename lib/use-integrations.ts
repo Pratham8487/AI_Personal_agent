@@ -141,6 +141,8 @@ export function useIntegrations(userId: string | undefined) {
         window.location.assign(`/api/integrations/gmail/auth?uid=${userId}`);
         return;
       }
+      // WhatsApp connects through the pairing dialog, not a status flip.
+      if (providerId === "whatsapp") return;
       await run(providerId, () => setStatus(providerId, "connected"));
     },
     [userId, pending, run, setStatus],
@@ -161,14 +163,49 @@ export function useIntegrations(userId: string | undefined) {
           applyStatus(uid, "gmail", "disconnected", null);
           return;
         }
+        if (providerId === "whatsapp") {
+          const res = await fetch("/api/integrations/whatsapp/disconnect", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId: uid }),
+          });
+          if (!res.ok) {
+            throw new Error(`WhatsApp disconnect failed (${res.status})`);
+          }
+          applyStatus(uid, "whatsapp", "disconnected", null);
+          return;
+        }
         await setStatus(providerId, "disconnected");
       });
     },
     [userId, pending, run, setStatus, applyStatus],
   );
 
+  /** Updates the cached status without a DB write (the server already did). */
+  const setStatusLocal = useCallback(
+    (providerId: string, status: "connected" | "disconnected") => {
+      if (!userId) return;
+      applyStatus(
+        userId,
+        providerId,
+        status,
+        status === "connected" ? new Date().toISOString() : null,
+      );
+    },
+    [userId, applyStatus],
+  );
+
   const statuses: StatusMap = (userId && statusCache.get(userId)) || {};
   const isLoading = userId ? !statusCache.has(userId) && !loadError : false;
 
-  return { statuses, isLoading, loadError, pending, errors, connect, disconnect };
+  return {
+    statuses,
+    isLoading,
+    loadError,
+    pending,
+    errors,
+    connect,
+    disconnect,
+    setStatusLocal,
+  };
 }

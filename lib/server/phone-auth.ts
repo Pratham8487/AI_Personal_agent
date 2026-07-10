@@ -48,11 +48,21 @@ export async function adminSql<T = Record<string, unknown>>(
   query: string,
   params: unknown[] = []
 ): Promise<T[]> {
-  const res = await fetch(`${BASE_URL}/api/database/advance/rawsql`, {
-    method: "POST",
-    headers: { "x-api-key": ADMIN_KEY, "Content-Type": "application/json" },
-    body: JSON.stringify({ query, params }),
-  });
+  const request = () =>
+    fetch(`${BASE_URL}/api/database/advance/rawsql`, {
+      method: "POST",
+      headers: { "x-api-key": ADMIN_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify({ query, params }),
+      signal: AbortSignal.timeout(10_000),
+    });
+  let res: Response;
+  try {
+    res = await request();
+  } catch {
+    // An idle keep-alive connection to InsForge can go stale and hang until
+    // the gateway 504s (~60s). Abort at 10s and retry on a fresh connection.
+    res = await request();
+  }
   if (!res.ok) {
     throw new Error(`InsForge SQL request failed (${res.status})`);
   }

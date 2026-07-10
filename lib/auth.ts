@@ -1,4 +1,5 @@
 import type { UserSchema } from "@insforge/sdk";
+import { errorMessage } from "./error-message";
 import { insforge } from "./insforge";
 
 /** Synthetic email domain backing phone-authenticated InsForge accounts. */
@@ -55,10 +56,26 @@ export async function syncUserToDatabase(user: UserSchema) {
   return { error };
 }
 
+function isTimeoutError(error: unknown): boolean {
+  return /timed?\s?out/i.test(errorMessage(error));
+}
+
 export async function signInWithGoogle() {
-  const { error } = await insforge.auth.signInWithOAuth("google", {
-    redirectTo: `${window.location.origin}/auth/callback`,
-    additionalParams: { prompt: "select_account" },
-  });
-  return error;
+  const start = () =>
+    insforge.auth.signInWithOAuth("google", {
+      redirectTo: `${window.location.origin}/auth/callback`,
+      additionalParams: { prompt: "select_account" },
+    });
+
+  const first = await start();
+  if (!first.error) return null;
+  if (!isTimeoutError(first.error)) return first.error;
+
+  // The InsForge backend occasionally hangs on the first request after
+  // idling; a retry on a fresh connection usually recovers.
+  const second = await start();
+  if (!second.error) return null;
+  return isTimeoutError(second.error)
+    ? { message: "Google sign-in is taking too long. Please try again." }
+    : second.error;
 }

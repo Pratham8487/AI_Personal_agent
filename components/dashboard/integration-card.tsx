@@ -75,13 +75,15 @@ export default function IntegrationCard({
             >
               {pending ? "Disconnecting…" : "Disconnect"}
             </button>
-            <button
-              type="button"
-              onClick={onOpenSettings}
-              className={outlineButton}
-            >
-              Settings
-            </button>
+            {provider.hasLiveTools && (
+              <button
+                type="button"
+                onClick={onOpenSettings}
+                className={outlineButton}
+              >
+                Settings
+              </button>
+            )}
           </>
         ) : (
           <button

@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import Card from "@/components/dashboard/card";
 import IntegrationCard from "@/components/dashboard/integration-card";
-import IntegrationSettingsDialog from "@/components/dashboard/integration-settings-dialog";
 import PageHeader from "@/components/dashboard/page-header";
-import { PROVIDERS, type Provider } from "@/lib/integrations";
+import WhatsappPairDialog from "@/components/dashboard/whatsapp-pair-dialog";
+import { PROVIDERS } from "@/lib/integrations";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { useIntegrations } from "@/lib/use-integrations";
 
@@ -22,12 +23,19 @@ const GMAIL_REDIRECT_ERRORS: Record<string, string> = {
 };
 
 export default function IntegrationsPage() {
+  const router = useRouter();
   const { user, isLoaded } = useCurrentUser();
-  const { statuses, isLoading, loadError, pending, errors, connect, disconnect } =
-    useIntegrations(user?.id);
-  const [settingsProvider, setSettingsProvider] = useState<Provider | null>(
-    null,
-  );
+  const {
+    statuses,
+    isLoading,
+    loadError,
+    pending,
+    errors,
+    connect,
+    disconnect,
+    setStatusLocal,
+  } = useIntegrations(user?.id);
+  const [whatsappPairing, setWhatsappPairing] = useState(false);
   const [gmailRedirectError, setGmailRedirectError] = useState<string | null>(
     null,
   );
@@ -93,21 +101,26 @@ export default function IntegrationsPage() {
                   ? (errors.gmail ?? gmailRedirectError)
                   : errors[provider.id]
               }
-              onConnect={() => connect(provider.id)}
+              onConnect={
+                provider.id === "whatsapp"
+                  ? () => setWhatsappPairing(true)
+                  : () => connect(provider.id)
+              }
               onDisconnect={() => disconnect(provider.id)}
-              onOpenSettings={() => setSettingsProvider(provider)}
+              onOpenSettings={() => router.push(`/integrations/${provider.id}`)}
             />
           ))}
         </div>
       )}
 
-      {settingsProvider && user && (
-        <IntegrationSettingsDialog
-          provider={settingsProvider}
+      {whatsappPairing && user && (
+        <WhatsappPairDialog
           userId={user.id}
-          onClose={() => setSettingsProvider(null)}
+          onLinked={() => setStatusLocal("whatsapp", "connected")}
+          onClose={() => setWhatsappPairing(false)}
         />
       )}
+
     </>
   );
 }

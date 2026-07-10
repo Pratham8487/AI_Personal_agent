@@ -52,7 +52,7 @@ export const PROVIDERS: Provider[] = [
     description: "Group-chat recaps and commitments turned into reminders.",
     Icon: WhatsAppIcon,
     brandClass: "text-[#25D366]",
-    hasLiveTools: false,
+    hasLiveTools: true,
   },
   {
     id: "slack",

@@ -1,20 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Modal from "./modal";
 import GmailToolRunner, { type McpTool } from "./gmail-tool-runner";
-import type { Provider } from "@/lib/integrations";
 
 /** Lists the Gmail tools by calling the MCP endpoint (tools/list). */
-function GmailMcpTools({ userId }: { userId: string }) {
+export default function GmailMcpTools({ userId }: { userId: string }) {
   const [tools, setTools] = useState<McpTool[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let active = true;
-    setTools(null);
-    setError(null);
     fetch(`/api/integrations/gmail/mcp?uid=${userId}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -46,7 +42,11 @@ function GmailMcpTools({ userId }: { userId: string }) {
         <p className="text-sm text-rose-500">{error}</p>
         <button
           type="button"
-          onClick={() => setAttempt((n) => n + 1)}
+          onClick={() => {
+            setTools(null);
+            setError(null);
+            setAttempt((n) => n + 1);
+          }}
           className="mt-3 rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-semibold text-zinc-600 transition-colors hover:bg-zinc-100 dark:border-white/10 dark:text-zinc-300 dark:hover:bg-white/5"
         >
           Retry
@@ -57,7 +57,8 @@ function GmailMcpTools({ userId }: { userId: string }) {
 
   if (!tools) {
     return (
-      <div className="space-y-2">
+      <div className="grid gap-3 lg:grid-cols-2">
+        <div className="skeleton h-14 rounded-xl" />
         <div className="skeleton h-14 rounded-xl" />
         <div className="skeleton h-14 rounded-xl" />
         <div className="skeleton h-14 rounded-xl" />
@@ -74,32 +75,10 @@ function GmailMcpTools({ userId }: { userId: string }) {
   }
 
   return (
-    <ul className="space-y-2">
+    <ul className="grid items-start gap-3 lg:grid-cols-2">
       {tools.map((tool) => (
         <GmailToolRunner key={tool.name} tool={tool} userId={userId} />
       ))}
     </ul>
-  );
-}
-
-export default function IntegrationSettingsDialog({
-  provider,
-  userId,
-  onClose,
-}: {
-  provider: Provider;
-  userId: string;
-  onClose: () => void;
-}) {
-  return (
-    <Modal title={`${provider.name} MCP tools`} onClose={onClose}>
-      {provider.hasLiveTools ? (
-        <GmailMcpTools userId={userId} />
-      ) : (
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">
-          No MCP tools available.
-        </p>
-      )}
-    </Modal>
   );
 }

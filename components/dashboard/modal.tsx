@@ -28,7 +28,7 @@ export default function Modal({
       }}
       className="glass-card m-auto w-full max-w-lg bg-white! p-0 text-zinc-900 backdrop:bg-black/40 backdrop:backdrop-blur-md dark:bg-[#17111f]! dark:text-zinc-100"
     >
-      <div className="max-h-[85vh] overflow-y-auto p-6">
+      <div className="no-scrollbar max-h-[85vh] overflow-y-auto p-6">
         <div className="mb-5 flex items-start justify-between gap-3">
           <h2
             id="modal-title"
