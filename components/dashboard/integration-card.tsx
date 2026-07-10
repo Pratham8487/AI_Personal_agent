@@ -85,7 +85,7 @@ export default function IntegrationCard({
               </button>
             )}
           </>
-        ) : (
+        ) : provider.hasLiveTools ? (
           <button
             type="button"
             onClick={onConnect}
@@ -93,6 +93,14 @@ export default function IntegrationCard({
             className="w-full rounded-lg bg-gradient-to-r from-violet-500 to-blue-500 px-3 py-2 text-xs font-semibold text-white shadow-lg shadow-violet-500/25 transition-opacity hover:opacity-85 disabled:opacity-50"
           >
             {pending ? "Connecting…" : "Connect"}
+          </button>
+        ) : (
+          <button
+            type="button"
+            disabled
+            className="w-full cursor-not-allowed rounded-lg border border-zinc-200 px-3 py-2 text-xs font-semibold text-zinc-400 dark:border-white/10 dark:text-zinc-500"
+          >
+            Coming Soon
           </button>
         )}
       </div>
