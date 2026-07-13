@@ -4,6 +4,7 @@ import Link from "next/link";
 import Badge from "@/components/dashboard/badge";
 import Card from "@/components/dashboard/card";
 import PageHeader from "@/components/dashboard/page-header";
+import Select from "@/components/dashboard/select";
 import { userDisplayName } from "@/lib/auth";
 import { useCurrentUser } from "@/lib/use-current-user";
 import {
@@ -22,9 +23,6 @@ const CHANNEL_LABELS: { key: keyof DeliveryChannels; label: string }[] = [
   { key: "slack", label: "Slack" },
   { key: "whatsapp", label: "WhatsApp" },
 ];
-
-const selectClass =
-  "rounded-lg border border-zinc-200 bg-white px-2 py-1 text-sm text-zinc-700 focus:outline-none focus:ring-2 focus:ring-violet-500/40 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200";
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/).slice(0, 2);
@@ -69,17 +67,15 @@ function PreferenceRows({
     <ul className="space-y-4">
       <li className="flex items-center justify-between gap-3">
         <p className="text-sm text-zinc-700 dark:text-zinc-200">Daily briefing time</p>
-        <select
+        <Select
+          ariaLabel="Daily briefing time"
           value={settings.briefing_time}
-          onChange={(e) => onUpdate({ briefing_time: e.target.value })}
-          className={selectClass}
-        >
-          {BRIEFING_TIMES.map((time) => (
-            <option key={time} value={time}>
-              {formatTime(time)}
-            </option>
-          ))}
-        </select>
+          onChange={(briefing_time) => onUpdate({ briefing_time })}
+          options={BRIEFING_TIMES.map((time) => ({
+            value: time,
+            label: formatTime(time),
+          }))}
+        />
       </li>
       <li className="flex items-center justify-between gap-3">
         <p className="text-sm text-zinc-700 dark:text-zinc-200">Timezone</p>
@@ -87,17 +83,15 @@ function PreferenceRows({
       </li>
       <li className="flex items-center justify-between gap-3">
         <p className="text-sm text-zinc-700 dark:text-zinc-200">Language</p>
-        <select
+        <Select
+          ariaLabel="Language"
           value={settings.language}
-          onChange={(e) => onUpdate({ language: e.target.value })}
-          className={selectClass}
-        >
-          {LANGUAGES.map((language) => (
-            <option key={language} value={language}>
-              {language}
-            </option>
-          ))}
-        </select>
+          onChange={(language) => onUpdate({ language })}
+          options={LANGUAGES.map((language) => ({
+            value: language,
+            label: language,
+          }))}
+        />
       </li>
     </ul>
   );
