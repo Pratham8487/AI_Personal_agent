@@ -61,10 +61,16 @@ function stripFences(text: string): string {
   return text.replace(/^\s*```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "");
 }
 
+export type ChatJsonOptions = {
+  maxTokens?: number;
+  timeoutMs?: number;
+};
+
 async function chatCompletion(
   systemPrompt: string,
-  payload: AiSourcePayload,
+  payload: unknown,
   withJsonFormat: boolean,
+  opts: ChatJsonOptions,
 ): Promise<Response> {
   return fetch(`${BASE_URL}/chat/completions`, {
     method: "POST",
@@ -79,31 +85,33 @@ async function chatCompletion(
         { role: "user", content: JSON.stringify(payload) },
       ],
       temperature: 0.3,
-      max_tokens: 400,
+      max_tokens: opts.maxTokens ?? 400,
       ...(withJsonFormat
         ? { response_format: { type: "json_object" } }
         : {}),
     }),
-    signal: AbortSignal.timeout(TIMEOUT_MS),
+    signal: AbortSignal.timeout(opts.timeoutMs ?? TIMEOUT_MS),
   });
 }
 
 /**
- * Generates the AI subset of the dashboard from the bounded source data.
- * Throws on any failure (missing key, HTTP error, timeout, unparseable
- * output) — the caller falls back to a mechanical brief; never invents data.
+ * Sends one system-prompt + JSON-payload chat completion and parses the JSON
+ * reply. Throws on any failure (missing key, HTTP error, timeout, unparseable
+ * output) — callers sanitize the returned value and handle their own fallback.
  */
-export async function generateAiBrief(
-  payload: AiSourcePayload,
-  promptHints: string[],
-): Promise<AiBrief> {
+export async function chatJson(
+  systemPrompt: string,
+  payload: unknown,
+  opts: ChatJsonOptions = {},
+): Promise<unknown> {
   if (!aiConfigured()) throw new AiNotConfiguredError();
-  const systemPrompt = buildSystemPrompt(payload.sources, promptHints);
 
   // Providers without response_format support reject the request with 400;
-  // retry once relying on the prompt alone (sanitizeAiBrief guards the shape).
-  let res = await chatCompletion(systemPrompt, payload, true);
-  if (res.status === 400) res = await chatCompletion(systemPrompt, payload, false);
+  // retry once relying on the prompt alone (the caller's sanitizer guards
+  // the shape).
+  let res = await chatCompletion(systemPrompt, payload, true, opts);
+  if (res.status === 400)
+    res = await chatCompletion(systemPrompt, payload, false, opts);
   if (!res.ok) {
     throw new Error(`AI request failed (${res.status} ${MODEL})`);
   }
@@ -116,7 +124,20 @@ export async function generateAiBrief(
     throw new Error("AI response was empty.");
   }
 
-  const parsed: unknown = JSON.parse(stripFences(content));
+  return JSON.parse(stripFences(content)) as unknown;
+}
+
+/**
+ * Generates the AI subset of the dashboard from the bounded source data.
+ * Throws on any failure — the caller falls back to a mechanical brief;
+ * never invents data.
+ */
+export async function generateAiBrief(
+  payload: AiSourcePayload,
+  promptHints: string[],
+): Promise<AiBrief> {
+  const systemPrompt = buildSystemPrompt(payload.sources, promptHints);
+  const parsed = await chatJson(systemPrompt, payload);
   const brief = sanitizeAiBrief(parsed, payload.sources);
   if (!brief) throw new Error("AI response did not match the brief shape.");
   return brief;

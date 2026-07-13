@@ -6,13 +6,16 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "trigger:dev": "trigger dev",
+    "trigger:deploy": "trigger deploy"
   },
   "dependencies": {
     "@hugeicons/core-free-icons": "^4.2.2",
     "@hugeicons/react": "^1.1.9",
     "@insforge/sdk": "^1.4.3",
     "@messages-dev/sdk": "^0.2.0",
+    "@trigger.dev/sdk": "^4.5.3",
     "baileys": "^7.0.0-rc13",
     "country-codes-list": "^2.1.0",
     "next": "16.2.10",

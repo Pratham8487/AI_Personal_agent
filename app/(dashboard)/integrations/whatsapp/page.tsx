@@ -1,5 +1,7 @@
 "use client";
 
+import { ArrowLeft01Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Card from "@/components/dashboard/card";
@@ -17,9 +19,10 @@ export default function WhatsappIntegrationPage() {
     <>
       <Link
         href="/integrations"
-        className="mb-4 inline-block text-xs font-semibold text-zinc-500 transition-colors hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
+        className="mb-4 inline-flex items-center gap-1.5 text-xs font-semibold text-zinc-500 transition-colors hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
       >
-        ← Back to integrations
+        <HugeiconsIcon icon={ArrowLeft01Icon} size={14} strokeWidth={2} />
+        Back to integrations
       </Link>
       <PageHeader
         title="WhatsApp"

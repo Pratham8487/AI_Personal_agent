@@ -1,12 +1,14 @@
 "use client";
 
-import Link from "next/link";
+import { ArrowLeft01Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import Card from "@/components/dashboard/card";
 import GmailMcpTools from "@/components/dashboard/gmail-mcp-tools";
 import PageHeader from "@/components/dashboard/page-header";
 import { STATUS_CONNECTED } from "@/lib/integrations";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { useIntegrations } from "@/lib/use-integrations";
+import Link from "next/link";
 
 function Stat({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -29,10 +31,12 @@ export default function GmailIntegrationPage() {
     <>
       <Link
         href="/integrations"
-        className="mb-4 inline-block text-xs font-semibold text-zinc-500 transition-colors hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
+        className="mb-4 inline-flex items-center gap-1.5 text-xs font-semibold text-zinc-500 transition-colors hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
       >
-        ← Back to integrations
+        <HugeiconsIcon icon={ArrowLeft01Icon} size={14} strokeWidth={2} />
+        Back to integrations
       </Link>
+
       <PageHeader
         title="Gmail"
         description="Manage your Gmail connection and run its MCP tools."
