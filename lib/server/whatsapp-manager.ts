@@ -49,10 +49,15 @@ type Managed = {
   sock: WASocket | null;
   state: ConnState;
   phone: string | null;
+  /** Latest QR payload while pairing in QR mode; WhatsApp rotates it. */
+  qr: string | null;
   pairingExpiresAt: number | null;
   pairingTimer: ReturnType<typeof setTimeout> | null;
   /** Per-user mutex: pairing or reconnect currently in flight. */
   startPromise: Promise<unknown> | null;
+  /** Serialized creds writes; awaited before a socket restart so the
+   * restarted socket never loads stale credentials from the DB. */
+  credsWrite: Promise<void> | null;
   reconnectAttempts: number;
 };
 
@@ -69,9 +74,11 @@ function getOrCreate(userId: string): Managed {
       sock: null,
       state: "closed",
       phone: null,
+      qr: null,
       pairingExpiresAt: null,
       pairingTimer: null,
       startPromise: null,
+      credsWrite: null,
       reconnectAttempts: 0,
     };
     sessions.set(userId, session);
@@ -90,6 +97,7 @@ function clearPairingTimer(session: Managed): void {
 function teardownSocket(session: Managed): void {
   clearPairingTimer(session);
   session.pairingExpiresAt = null;
+  session.qr = null;
   if (session.sock) {
     try {
       session.sock.end(undefined);
@@ -163,10 +171,13 @@ async function createSocket(userId: string): Promise<WASocket> {
     syncFullHistory: false,
     getMessage: async () => undefined,
   });
+  const session = getOrCreate(userId);
   sock.ev.on("creds.update", () => {
-    saveCreds().catch((error) =>
-      console.error("WhatsApp creds save failed:", error),
-    );
+    // Chain writes: HTTP-SQL latency varies, and an out-of-order upsert
+    // would overwrite newer creds with older ones.
+    session.credsWrite = (session.credsWrite ?? Promise.resolve())
+      .then(() => saveCreds())
+      .catch((error) => console.error("WhatsApp creds save failed:", error));
   });
   bindStoreEvents(userId, sock);
   return sock;
@@ -189,10 +200,13 @@ async function handleConnectionUpdate(
   // A newer socket owns this session; ignore events from the old one.
   if (!session || session.sock !== sock) return;
 
+  if (update.qr) session.qr = update.qr;
+
   if (update.connection === "open") {
     session.state = "open";
     session.reconnectAttempts = 0;
     session.pairingExpiresAt = null;
+    session.qr = null;
     clearPairingTimer(session);
     const waJid = sock.user?.id ? sock.user.id.replace(/:\d+@/, "@") : null;
     await upsertSessionRow(userId, session.phone, waJid);
@@ -211,10 +225,14 @@ async function handleConnectionUpdate(
   const registered = sock.authState.creds.registered === true;
 
   if (code === RESTART_REQUIRED) {
-    // Expected right after a successful pairing: reopen on the same creds.
+    // Expected right after a successful pairing: reopen on the same creds —
+    // but only once the fresh creds have finished writing to the DB.
     session.state = "connecting";
     session.sock = null;
-    void startSocket(userId).catch((error) => {
+    void (async () => {
+      await session.credsWrite;
+      await startSocket(userId);
+    })().catch((error) => {
       console.error("WhatsApp restart failed:", error);
       session.state = "closed";
     });
@@ -358,6 +376,49 @@ export async function beginPairing(
   };
 }
 
+/**
+ * QR-mode alternative to beginPairing: starts a fresh socket and returns
+ * the first QR payload; rotations are exposed through getStatus while the
+ * user scans from WhatsApp > Linked Devices.
+ */
+export async function beginQrPairing(userId: string): Promise<{ qr: string }> {
+  if (await hasStoredCreds(userId)) throw new WhatsAppAlreadyLinkedError();
+
+  const session = getOrCreate(userId);
+  if (session.startPromise) {
+    throw new Error("A pairing attempt is already in progress. Please retry in a moment.");
+  }
+
+  await ensureUserRecord(userId);
+  teardownSocket(session);
+  await clearAuthState(userId);
+  session.phone = null;
+  session.state = "pairing";
+
+  const work = (async () => {
+    const sock = await createSocket(userId);
+    session.sock = sock;
+    wireConnectionEvents(userId, sock);
+    await waitForQr(sock, QR_WAIT_MS);
+  })();
+  session.startPromise = work
+    .catch(() => {})
+    .finally(() => {
+      session.startPromise = null;
+    });
+
+  try {
+    await work;
+  } catch (error) {
+    teardownSocket(session);
+    throw error;
+  }
+
+  armPairingTimer(userId, session);
+  if (!session.qr) throw new Error("Could not get a QR code. Please retry.");
+  return { qr: session.qr };
+}
+
 async function waitForState(
   userId: string,
   target: ConnState,
@@ -412,6 +473,8 @@ export type WhatsappStatus = {
   connection: "open" | "connecting" | "closed" | "none";
   phone: string | null;
   pairingPending: boolean;
+  /** Current QR payload while a QR pairing attempt is running. */
+  qr: string | null;
 };
 
 /** Side-effect free: the pairing dialog polls this. */
@@ -438,6 +501,7 @@ export async function getStatus(userId: string): Promise<WhatsappStatus> {
       : "none",
     phone,
     pairingPending: session?.state === "pairing" && !liveRegistered,
+    qr: session?.state === "pairing" ? session.qr : null,
   };
 }
 

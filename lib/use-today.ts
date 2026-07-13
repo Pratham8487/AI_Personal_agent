@@ -18,3 +18,17 @@ export function useToday(): string | null {
     () => null,
   );
 }
+
+/** Time-of-day greeting; null during SSR to avoid hydration mismatches. */
+export function useGreeting(): string | null {
+  return useSyncExternalStore(
+    emptySubscribe,
+    () => {
+      const hour = new Date().getHours();
+      if (hour < 12) return "Good Morning";
+      if (hour < 17) return "Good Afternoon";
+      return "Good Evening";
+    },
+    () => null,
+  );
+}

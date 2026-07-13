@@ -14,27 +14,31 @@ import GmailConnectCard from "@/components/dashboard/gmail-connect-card";
 import PageHeader from "@/components/dashboard/page-header";
 import PriorityItemsCard from "@/components/dashboard/priority-items-card";
 import StatCard from "@/components/dashboard/stat-card";
+import Toast from "@/components/dashboard/toast";
 import TodaysBriefCard from "@/components/dashboard/todays-brief-card";
 import { userDisplayName } from "@/lib/auth";
 import { STATUS_CONNECTED } from "@/lib/integrations";
 import { useCurrentUser } from "@/lib/use-current-user";
-import { useDashboardBrief } from "@/lib/use-dashboard-brief";
+import { useDashboardData } from "@/lib/use-dashboard-brief";
 import { useIntegrations } from "@/lib/use-integrations";
-import { useToday } from "@/lib/use-today";
+import { useGreeting, useToday } from "@/lib/use-today";
 
 export default function DashboardPage() {
   const { user, isLoaded } = useCurrentUser();
   const { statuses, isLoading } = useIntegrations(user?.id);
   const today = useToday();
+  const greeting = useGreeting();
   const gmailConnected = statuses.gmail?.status === STATUS_CONNECTED;
   const whatsappConnected = statuses.whatsapp?.status === STATUS_CONNECTED;
   const hasLiveSource = gmailConnected || whatsappConnected;
   const gatesLoading = !isLoaded || Boolean(user && isLoading);
-  const brief = useDashboardBrief(user?.id, Boolean(user) && hasLiveSource);
+  const brief = useDashboardData(user?.id, Boolean(user) && hasLiveSource);
 
   const briefLoading =
     gatesLoading || (Boolean(user) && hasLiveSource && brief.status === "loading");
-  const counts = brief.data?.counts;
+  const data = brief.data;
+  const refreshQuota = data?.refresh;
+  const limitReached = Boolean(refreshQuota && refreshQuota.remaining <= 0);
 
   // null → still loading (skeleton tile); "—" → no live data available.
   const statValue = (value: number | undefined): string | null => {
@@ -45,36 +49,47 @@ export default function DashboardPage() {
   const stats = [
     {
       label: "Important",
-      value: statValue(counts?.important),
+      value: statValue(data?.importantCount),
       icon: Alert02Icon,
       iconBg: "bg-rose-500 shadow-rose-500/40",
+      description: "Items requiring immediate attention.",
     },
     {
       label: "Priority",
-      value: statValue(counts?.priority),
+      value: statValue(data?.priorityCount),
       icon: Flag02Icon,
       iconBg: "bg-indigo-500 shadow-indigo-500/40",
+      description: "AI prioritized tasks.",
     },
     {
       label: "Follow-ups",
-      value: statValue(counts?.followUps),
+      value: statValue(data?.followUpCount),
       icon: Clock01Icon,
       iconBg: "bg-amber-500 shadow-amber-500/40",
+      description: "Pending replies and reminders.",
     },
   ];
 
   return (
     <>
       <PageHeader
-        title={user ? `Welcome back, ${userDisplayName(user)}` : "Dashboard"}
-        description={today ?? "Your day across every inbox, in one brief."}
+        title={user ? `👋 Welcome, ${userDisplayName(user)}` : "Dashboard"}
+        description={
+          [greeting, today].filter(Boolean).join(" · ") ||
+          "Your day across every inbox, in one brief."
+        }
         action={
           user && hasLiveSource ? (
             <button
               type="button"
               onClick={brief.regenerate}
-              disabled={brief.isRegenerating}
-              className="flex shrink-0 items-center gap-2 rounded-lg border border-zinc-200 px-3 py-2 text-xs font-semibold text-zinc-600 transition-colors hover:bg-zinc-100 disabled:opacity-50 dark:border-white/10 dark:text-zinc-300 dark:hover:bg-white/5"
+              disabled={brief.isRegenerating || limitReached}
+              title={
+                limitReached
+                  ? "You've reached today's AI refresh limit. Try again after 24 hours."
+                  : undefined
+              }
+              className="flex shrink-0 items-center gap-2 rounded-lg bg-gradient-to-r from-violet-500 to-blue-500 px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-violet-500/25 transition-opacity hover:opacity-85 disabled:opacity-50"
             >
               <HugeiconsIcon
                 icon={RefreshIcon}
@@ -82,16 +97,27 @@ export default function DashboardPage() {
                 strokeWidth={1.8}
                 className={brief.isRegenerating ? "animate-spin" : ""}
               />
-              {brief.isRegenerating ? "Refreshing…" : "Refresh"}
+              {brief.isRegenerating
+                ? "Refreshing…"
+                : refreshQuota
+                  ? `Refresh (${refreshQuota.remaining} left)`
+                  : "Refresh"}
             </button>
           ) : undefined
         }
       />
 
+      {data?.partial && (
+        <div className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-xs font-medium text-amber-700 dark:text-amber-400">
+          Partial data available — a connected app didn&apos;t respond. Refresh
+          to retry.
+        </div>
+      )}
+
       <div className="grid gap-4 sm:grid-cols-3">
         {stats.map((stat) =>
           stat.value === null ? (
-            <div key={stat.label} className="skeleton h-24 rounded-3xl" />
+            <div key={stat.label} className="skeleton h-28 rounded-3xl" />
           ) : (
             <StatCard key={stat.label} {...stat} value={stat.value} />
           ),
@@ -117,14 +143,7 @@ export default function DashboardPage() {
                 subtitle={
                   brief.data?.degraded
                     ? "AI unavailable — showing basics"
-                    : brief.data
-                      ? `AI summary of your connected apps · Updated ${new Date(
-                          brief.data.generatedAt,
-                        ).toLocaleTimeString("en-US", {
-                          hour: "numeric",
-                          minute: "2-digit",
-                        })}`
-                      : "AI summary of your connected apps"
+                    : "AI generated summary from your connected apps."
                 }
               />
             ) : (
@@ -169,6 +188,18 @@ export default function DashboardPage() {
           </>
         )}
       </div>
+
+      {data && (
+        <p className="mt-8 text-center text-xs text-zinc-400 dark:text-zinc-500">
+          Last updated{" "}
+          {new Date(data.lastUpdated).toLocaleTimeString("en-US", {
+            hour: "numeric",
+            minute: "2-digit",
+          })}
+        </p>
+      )}
+
+      <Toast message={brief.limitNotice} />
     </>
   );
 }

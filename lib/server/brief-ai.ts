@@ -1,8 +1,4 @@
-import {
-  sanitizeBrief,
-  type BriefApp,
-  type DashboardBrief,
-} from "../dashboard-brief-types";
+import { sanitizeAiBrief, type AiBrief } from "../dashboard-brief-types";
 
 /**
  * Generic, provider-switchable AI client over the OpenAI-compatible Chat
@@ -31,40 +27,34 @@ export function aiConfigured(): boolean {
   return Boolean(API_KEY);
 }
 
-export type BriefEmail = {
-  from: string;
-  subject: string;
-  date: string;
-  snippet: string;
-};
-
-export type BriefWhatsappMessage = {
-  chat: string;
-  sender: string;
-  text: string;
-  sentAt: string;
-};
-
-/** Bounded snapshot of today's data across connected apps. */
-export type BriefSourceData = {
+/**
+ * Provider-agnostic AI input: `data` holds each connected provider's bounded,
+ * normalized payload keyed by provider id (built by lib/server/dashboard).
+ */
+export type AiSourcePayload = {
   now: string;
-  sources: BriefApp[];
-  unreadEmails: BriefEmail[];
-  awaitingEmails: BriefEmail[];
-  whatsappMessages: BriefWhatsappMessage[];
+  sources: string[];
+  data: Record<string, Record<string, unknown>>;
 };
 
-const SYSTEM_PROMPT = `You generate a very concise daily brief for a personal dashboard from the user's connected app data (Gmail emails, WhatsApp messages). Be extremely brief — short punchy sentences, no filler.
+function buildSystemPrompt(
+  sources: string[],
+  promptHints: string[],
+): string {
+  const sourceList = sources.map((s) => `"${s}"`).join("|");
+  return `You generate a very concise daily brief for a personal dashboard from the user's connected app data. Be extremely brief — short punchy sentences, no filler.
 Rules:
 - Use ONLY the provided data. Never invent senders, times, counts, or content.
+- Ignore newsletters, spam, advertisements, promotions, and automated/no-reply notification emails.
+- Focus on meetings, deadlines, pending replies, action items, commitments, requests, and urgent conversations.
 - Respond with a single JSON object and nothing else, matching exactly:
-{"counts":{"important":<int>,"priority":<int>,"followUps":<int>},"brief":[{"text":<string>,"apps":["gmail"|"whatsapp",...]}],"priorityItems":[{"app":"gmail"|"whatsapp","title":<string>,"time":<string>,"description":<string>,"priority":"low"|"medium"|"high"}]}
-- unreadEmails are unread inbox emails; awaitingEmails have been unread for 2+ days; whatsappMessages are from the last 24 hours.
-- brief: 2-3 short one-sentence summaries (max 90 characters each) of the most notable items or themes, each tagged with its source app(s). Name the key sender or topic.
-- priorityItems: the 3 most urgent items, most urgent first. title <= 60 chars; description <= 100 chars with the key fact (who/what) and why it needs attention; time = short human time derived from the item's timestamp and "now" (e.g. "9:41 AM", "Yesterday").
-- counts.important = number of distinct items in the data that plausibly need the user's attention today.
-- counts.priority = the number of priorityItems.
-- counts.followUps = number of awaitingEmails plus WhatsApp threads clearly awaiting the user's reply.`;
+{"importantCount":<int>,"followUpCount":<int>,"brief":[{"text":<string>,"apps":[${sourceList},...]}],"priorityItems":[{"source":${sourceList},"title":<string>,"description":<string>,"priority":"low"|"medium"|"high","timestamp":<ISO 8601 string>,"ref":<string>}]}
+- Data notes: ${promptHints.join(" ")}
+- brief: 2-3 short one-sentence summaries (max 90 characters each) of the most notable items or themes, each tagged with its source app(s). Name the key sender or topic. End with ONE extra action-focused entry tagged with apps:[] — the single most important thing the user should do today, phrased as an imperative.
+- priorityItems: the top 3 most urgent items, most urgent first. title <= 60 chars; description <= 100 chars with the key fact (who/what) and why it needs attention; timestamp = the underlying item's own timestamp copied verbatim; ref = the underlying item's "ref" value copied EXACTLY, character for character — required whenever the source item has a "ref" field; omit only when it truly has none.
+- importantCount = number of distinct items in the data that plausibly need the user's attention today.
+- followUpCount = number of items clearly waiting on the user's reply (e.g. aging emails, unanswered chats).`;
+}
 
 /** Some models wrap JSON in markdown fences despite instructions. */
 function stripFences(text: string): string {
@@ -72,7 +62,8 @@ function stripFences(text: string): string {
 }
 
 async function chatCompletion(
-  payload: BriefSourceData,
+  systemPrompt: string,
+  payload: AiSourcePayload,
   withJsonFormat: boolean,
 ): Promise<Response> {
   return fetch(`${BASE_URL}/chat/completions`, {
@@ -84,7 +75,7 @@ async function chatCompletion(
     body: JSON.stringify({
       model: MODEL,
       messages: [
-        { role: "system", content: SYSTEM_PROMPT },
+        { role: "system", content: systemPrompt },
         { role: "user", content: JSON.stringify(payload) },
       ],
       temperature: 0.3,
@@ -98,19 +89,21 @@ async function chatCompletion(
 }
 
 /**
- * Generates the dashboard brief from the bounded source data. Throws on any
- * failure (missing key, HTTP error, timeout, unparseable output) — the caller
- * falls back to a mechanical brief; this function never invents data.
+ * Generates the AI subset of the dashboard from the bounded source data.
+ * Throws on any failure (missing key, HTTP error, timeout, unparseable
+ * output) — the caller falls back to a mechanical brief; never invents data.
  */
-export async function generateDashboardBrief(
-  payload: BriefSourceData,
-): Promise<DashboardBrief> {
+export async function generateAiBrief(
+  payload: AiSourcePayload,
+  promptHints: string[],
+): Promise<AiBrief> {
   if (!aiConfigured()) throw new AiNotConfiguredError();
+  const systemPrompt = buildSystemPrompt(payload.sources, promptHints);
 
   // Providers without response_format support reject the request with 400;
-  // retry once relying on the prompt alone (sanitizeBrief guards the shape).
-  let res = await chatCompletion(payload, true);
-  if (res.status === 400) res = await chatCompletion(payload, false);
+  // retry once relying on the prompt alone (sanitizeAiBrief guards the shape).
+  let res = await chatCompletion(systemPrompt, payload, true);
+  if (res.status === 400) res = await chatCompletion(systemPrompt, payload, false);
   if (!res.ok) {
     throw new Error(`AI request failed (${res.status} ${MODEL})`);
   }
@@ -124,7 +117,7 @@ export async function generateDashboardBrief(
   }
 
   const parsed: unknown = JSON.parse(stripFences(content));
-  const brief = sanitizeBrief(parsed);
+  const brief = sanitizeAiBrief(parsed, payload.sources);
   if (!brief) throw new Error("AI response did not match the brief shape.");
   return brief;
 }

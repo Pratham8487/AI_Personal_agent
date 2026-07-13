@@ -1,11 +1,12 @@
 import Link from "next/link";
+import { memo } from "react";
 import Badge from "./badge";
 import Card from "./card";
 import { PROVIDERS, STATUS_CONNECTED } from "@/lib/integrations";
 import type { IntegrationStatus } from "@/lib/use-integrations";
 
 /** Top 4 apps, connected first, each with status and a Manage link. */
-export default function ConnectedAppsCard({
+function ConnectedAppsCard({
   statuses,
   isLoading,
   className = "",
@@ -61,7 +62,7 @@ export default function ConnectedAppsCard({
                 </Badge>
                 <Link
                   href="/integrations"
-                  className="text-xs font-semibold text-violet-600 transition-colors hover:text-violet-500 dark:text-violet-400 dark:hover:text-violet-300"
+                  className="rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-semibold text-zinc-600 transition-colors hover:bg-zinc-100 dark:border-white/10 dark:text-zinc-300 dark:hover:bg-white/5"
                 >
                   Manage
                 </Link>
@@ -73,3 +74,5 @@ export default function ConnectedAppsCard({
     </Card>
   );
 }
+
+export default memo(ConnectedAppsCard);

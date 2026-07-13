@@ -3,11 +3,12 @@ import { normalizePhone } from "@/lib/server/phone-auth";
 import {
   WhatsAppAlreadyLinkedError,
   beginPairing,
+  beginQrPairing,
 } from "@/lib/server/whatsapp-manager";
 
-/** Starts a pairing attempt and returns the numeric linking code. */
+/** Starts a pairing attempt: numeric linking code, or QR when mode=qr. */
 export async function POST(request: Request) {
-  let body: { userId?: string; phone?: string };
+  let body: { userId?: string; phone?: string; mode?: string };
   try {
     body = await request.json();
   } catch {
@@ -17,8 +18,9 @@ export async function POST(request: Request) {
   if (!isUuid(userId)) {
     return Response.json({ error: "Invalid user id." }, { status: 400 });
   }
-  const phone = normalizePhone(body.phone ?? "");
-  if (!phone) {
+
+  const phone = body.mode === "qr" ? null : normalizePhone(body.phone ?? "");
+  if (body.mode !== "qr" && !phone) {
     return Response.json(
       { error: "Enter a valid phone number with country code (e.g. +15551234567)." },
       { status: 400 },
@@ -26,7 +28,11 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { pairingCode, expiresAt } = await beginPairing(userId, phone);
+    if (body.mode === "qr") {
+      const { qr } = await beginQrPairing(userId);
+      return Response.json({ qr });
+    }
+    const { pairingCode, expiresAt } = await beginPairing(userId, phone as string);
     return Response.json({ pairingCode, expiresAt });
   } catch (error) {
     if (error instanceof WhatsAppAlreadyLinkedError) {

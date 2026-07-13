@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { customArray } from "country-codes-list";
+import QRCode from "qrcode";
 import Modal from "./modal";
 
 /** Same shape normalizePhone accepts server-side. */
@@ -36,7 +37,13 @@ const primaryButtonClass =
 const secondaryButtonClass =
   "rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-semibold text-zinc-600 transition-colors hover:bg-zinc-100 dark:border-white/10 dark:text-zinc-300 dark:hover:bg-white/5";
 
-type Phase = "enter-phone" | "requesting" | "show-code" | "success";
+type Phase =
+  | "enter-phone"
+  | "requesting"
+  | "show-code"
+  | "requesting-qr"
+  | "show-qr"
+  | "success";
 
 /** Compact country-code dropdown: search + fixed-height scrollable list. */
 function CountryCodePicker({
@@ -139,6 +146,9 @@ export default function WhatsappPairDialog({
   const [expiresAt, setExpiresAt] = useState(0);
   const [now, setNow] = useState(() => Date.now());
   const [error, setError] = useState<string | null>(null);
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  const [qrString, setQrString] = useState<string | null>(null);
+  const qrRef = useRef<string | null>(null);
   const linkedRef = useRef(false);
 
   const dial = COUNTRIES.find((c) => c.iso === country)?.dial ?? "";
@@ -175,27 +185,99 @@ export default function WhatsappPairDialog({
     }
   }, [userId, normalized]);
 
-  // Poll until the phone confirms the link.
+  const requestQr = useCallback(async () => {
+    setPhase("requesting-qr");
+    setError(null);
+    try {
+      const res = await fetch("/api/integrations/whatsapp/pair", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, mode: "qr" }),
+      });
+      const body = (await res.json().catch(() => null)) as {
+        qr?: string;
+        error?: string;
+      } | null;
+      if (!res.ok || !body?.qr) {
+        setError(body?.error ?? "Could not generate a QR code. Please retry.");
+        setPhase("enter-phone");
+        return;
+      }
+      qrRef.current = body.qr;
+      setQrString(body.qr);
+      setPhase("show-qr");
+    } catch {
+      setError("Could not reach the server. Please retry.");
+      setPhase("enter-phone");
+    }
+  }, [userId]);
+
+  // Render (and re-render on rotation) the QR payload as an image.
   useEffect(() => {
-    if (phase !== "show-code") return;
+    if (!qrString) return;
+    let active = true;
+    QRCode.toDataURL(qrString, { width: 240, margin: 1 })
+      .then((url) => {
+        if (active) setQrDataUrl(url);
+      })
+      .catch(() => {
+        if (active) setError("Could not render the QR code. Please retry.");
+      });
+    return () => {
+      active = false;
+    };
+  }, [qrString]);
+
+  // Poll until the phone confirms the link (and pick up rotated QR codes).
+  useEffect(() => {
+    if (phase !== "show-code" && phase !== "show-qr") return;
     const startedAt = Date.now();
     const interval = setInterval(() => {
       if (Date.now() - startedAt > POLL_TIMEOUT_MS) {
         clearInterval(interval);
-        setError("Pairing timed out. Get a new code to retry.");
+        setError(
+          phase === "show-qr"
+            ? "Pairing timed out. Get a new QR code to retry."
+            : "Pairing timed out. Get a new code to retry.",
+        );
         return;
       }
       fetch(`/api/integrations/whatsapp/status?uid=${userId}`)
         .then((res) => res.json())
-        .then((status: { linked?: boolean; connection?: string }) => {
-          if (status?.linked && status.connection === "open") {
-            clearInterval(interval);
-            linkedRef.current = true;
-            setError(null);
-            setPhase("success");
-            onLinked();
-          }
-        })
+        .then(
+          (status: {
+            linked?: boolean;
+            connection?: string;
+            qr?: string | null;
+          }) => {
+            if (status?.linked && status.connection === "open") {
+              clearInterval(interval);
+              linkedRef.current = true;
+              setError(null);
+              setPhase("success");
+              onLinked();
+              return;
+            }
+            if (
+              phase === "show-qr" &&
+              status?.qr &&
+              status.qr !== qrRef.current
+            ) {
+              qrRef.current = status.qr;
+              setQrString(status.qr);
+              return;
+            }
+            // Pairing socket died server-side; waiting further is pointless.
+            if (status?.connection === "closed" || status?.connection === "none") {
+              clearInterval(interval);
+              setError(
+                phase === "show-qr"
+                  ? "The pairing attempt ended. Get a new QR code to retry."
+                  : "The pairing attempt ended. Get a new code to retry.",
+              );
+            }
+          },
+        )
         .catch(() => {
           // transient; keep polling
         });
@@ -232,7 +314,9 @@ export default function WhatsappPairDialog({
 
   return (
     <Modal title="Connect WhatsApp" onClose={handleClose}>
-      {(phase === "enter-phone" || phase === "requesting") && (
+      {(phase === "enter-phone" ||
+        phase === "requesting" ||
+        phase === "requesting-qr") && (
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -261,13 +345,75 @@ export default function WhatsappPairDialog({
           <div className="mt-4 flex justify-end">
             <button
               type="submit"
-              disabled={!phoneValid || phase === "requesting"}
+              disabled={!phoneValid || phase !== "enter-phone"}
               className={primaryButtonClass}
             >
               {phase === "requesting" ? "Generating code…" : "Get linking code"}
             </button>
           </div>
+          <button
+            type="button"
+            onClick={() => void requestQr()}
+            disabled={phase !== "enter-phone"}
+            className="mt-3 w-full text-center text-xs font-semibold text-violet-500 transition-colors hover:text-violet-400 disabled:opacity-50 dark:text-violet-400 dark:hover:text-violet-300"
+          >
+            {phase === "requesting-qr"
+              ? "Preparing QR code…"
+              : "Or link by scanning a QR code instead"}
+          </button>
         </form>
+      )}
+
+      {phase === "show-qr" && (
+        <div>
+          <p className="text-sm text-zinc-700 dark:text-zinc-200">
+            Scan this QR code with WhatsApp on your phone:
+          </p>
+          <div className="my-4 flex justify-center">
+            {qrDataUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={qrDataUrl}
+                alt="WhatsApp linking QR code"
+                className="h-60 w-60 rounded-xl bg-white p-2"
+              />
+            ) : (
+              <div className="skeleton h-60 w-60 rounded-xl" />
+            )}
+          </div>
+          <ol className="mt-4 list-decimal space-y-1 pl-5 text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
+            <li>Open WhatsApp and go to Settings → Linked Devices.</li>
+            <li>Tap “Link a Device”.</li>
+            <li>Point your phone at this screen to scan the code.</li>
+          </ol>
+          {error ? (
+            <p className="mt-4 text-sm text-rose-500">{error}</p>
+          ) : (
+            <p className="mt-4 flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+              <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
+              Waiting for you to scan the code…
+            </p>
+          )}
+          {error && (
+            <button
+              type="button"
+              onClick={() => void requestQr()}
+              className={`mt-3 ${secondaryButtonClass}`}
+            >
+              Get new QR code
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              setError(null);
+              setPhase("enter-phone");
+            }}
+            className="mt-4 w-full text-center text-xs font-semibold text-violet-500 transition-colors hover:text-violet-400 dark:text-violet-400 dark:hover:text-violet-300"
+          >
+            Use a pairing code instead
+          </button>
+        </div>
       )}
 
       {phase === "show-code" && (

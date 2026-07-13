@@ -1,6 +1,7 @@
 export default function Card({
   title,
   subtitle,
+  icon,
   action,
   hover = false,
   children,
@@ -8,6 +9,7 @@ export default function Card({
 }: {
   title?: string;
   subtitle?: string;
+  icon?: React.ReactNode;
   action?: React.ReactNode;
   hover?: boolean;
   children: React.ReactNode;
@@ -21,7 +23,8 @@ export default function Card({
         <div className="mb-5 flex items-start justify-between gap-3">
           <div>
             {title && (
-              <h2 className="text-sm font-semibold text-zinc-900 dark:text-white">
+              <h2 className="flex items-center gap-2 text-sm font-semibold text-zinc-900 dark:text-white">
+                {icon}
                 {title}
               </h2>
             )}

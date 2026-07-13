@@ -1,16 +1,18 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { sanitizeBrief, type DashboardBrief } from "./dashboard-brief-types";
+import { sanitizeDashboard, type DashboardData } from "./dashboard-brief-types";
 
 export type BriefStatus = "idle" | "loading" | "error" | "ready";
 
 export type DashboardBriefState = {
   status: BriefStatus;
-  data: DashboardBrief | null;
+  data: DashboardData | null;
   error: string | null;
   notConfigured: boolean;
   isRegenerating: boolean;
+  /** Set when the backend rejected a manual refresh (quota exhausted). */
+  limitNotice: string | null;
   retry: () => void;
   regenerate: () => void;
 };
@@ -21,7 +23,8 @@ type FetchResult = {
   key: string;
   error: string | null;
   notConfigured: boolean;
-  data: DashboardBrief | null;
+  data: DashboardData | null;
+  limitNotice?: string;
 };
 
 /**
@@ -30,10 +33,10 @@ type FetchResult = {
  * bypasses it and the server cache via force.
  */
 const CACHE_TTL_MS = 60_000;
-const cache = new Map<string, { data: DashboardBrief; fetchedAt: number }>();
+const cache = new Map<string, { data: DashboardData; fetchedAt: number }>();
 
 /** Fetches the AI dashboard brief for the user's connected apps. */
-export function useDashboardBrief(
+export function useDashboardData(
   userId: string | undefined,
   enabled: boolean,
 ): DashboardBriefState {
@@ -59,7 +62,7 @@ export function useDashboardBrief(
     }
     let active = true;
     if (force) setIsRegenerating(true);
-    fetch("/api/dashboard/brief", {
+    fetch("/api/dashboard", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId, force }),
@@ -68,10 +71,41 @@ export function useDashboardBrief(
         const body: unknown = await res.json().catch(() => null);
         if (!active) return;
         if (!res.ok) {
-          const { error, code } = (body ?? {}) as {
-            error?: string;
-            code?: string;
-          };
+          const { error, code, reason, message, remainingRefreshes, nextRefreshAt } =
+            (body ?? {}) as {
+              error?: string;
+              code?: string;
+              reason?: string;
+              message?: string;
+              remainingRefreshes?: number;
+              nextRefreshAt?: string | null;
+            };
+          if (reason === "refresh_limit_reached") {
+            // Quota exhausted: keep the current dashboard, sync the quota,
+            // surface a notice. Never retry automatically.
+            const cached = cache.get(userId)?.data ?? null;
+            const updated = cached?.refresh
+              ? {
+                  ...cached,
+                  refresh: {
+                    ...cached.refresh,
+                    used: cached.refresh.limit,
+                    remaining: remainingRefreshes ?? 0,
+                    nextRefreshAt:
+                      nextRefreshAt ?? cached.refresh.nextRefreshAt,
+                  },
+                }
+              : cached;
+            if (updated) cache.set(userId, { data: updated, fetchedAt: Date.now() });
+            setResult({
+              key,
+              error: updated ? null : (message ?? GENERIC_ERROR),
+              notConfigured: false,
+              data: updated,
+              limitNotice: message ?? "You've reached today's refresh limit.",
+            });
+            return;
+          }
           setResult({
             key,
             error: error ?? GENERIC_ERROR,
@@ -80,7 +114,7 @@ export function useDashboardBrief(
           });
           return;
         }
-        const data = sanitizeBrief(body);
+        const data = sanitizeDashboard(body);
         if (!data) {
           setResult({ key, error: GENERIC_ERROR, notConfigured: false, data: null });
           return;
@@ -125,6 +159,7 @@ export function useDashboardBrief(
     error: own?.error ?? null,
     notConfigured: own?.notConfigured ?? false,
     isRegenerating,
+    limitNotice: own?.limitNotice ?? null,
     retry,
     regenerate,
   };

@@ -66,11 +66,13 @@ export async function getLabels(userId: string): Promise<string[]> {
 }
 
 type MessageMeta = {
+  id: string;
   snippet?: string;
   payload?: { headers?: { name: string; value: string }[] };
 };
 
 export type EmailSummary = {
+  id: string;
   from: string;
   subject: string;
   date: string;
@@ -118,6 +120,7 @@ export async function fetchEmails(
       headers.find((h) => h.name.toLowerCase() === name.toLowerCase())
         ?.value ?? "";
     return {
+      id: message.id,
       from: header("From"),
       subject: header("Subject"),
       date: header("Date"),
