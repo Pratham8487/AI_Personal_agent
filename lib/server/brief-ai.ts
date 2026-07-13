@@ -27,6 +27,16 @@ export function aiConfigured(): boolean {
   return Boolean(API_KEY);
 }
 
+/** Connection details for callers that talk to the API directly (streaming). */
+export function aiConnection(): {
+  apiKey: string;
+  model: string;
+  baseUrl: string;
+} {
+  if (!API_KEY) throw new AiNotConfiguredError();
+  return { apiKey: API_KEY, model: MODEL, baseUrl: BASE_URL };
+}
+
 /**
  * Provider-agnostic AI input: `data` holds each connected provider's bounded,
  * normalized payload keyed by provider id (built by lib/server/dashboard).
@@ -109,9 +119,16 @@ export async function chatJson(
   // Providers without response_format support reject the request with 400;
   // retry once relying on the prompt alone (the caller's sanitizer guards
   // the shape).
-  let res = await chatCompletion(systemPrompt, payload, true, opts);
-  if (res.status === 400)
-    res = await chatCompletion(systemPrompt, payload, false, opts);
+  let withJson = true;
+  let res = await chatCompletion(systemPrompt, payload, withJson, opts);
+  if (res.status === 400) {
+    withJson = false;
+    res = await chatCompletion(systemPrompt, payload, withJson, opts);
+  }
+  // Provider 5xx errors are usually transient; retry once before failing.
+  if (res.status >= 500) {
+    res = await chatCompletion(systemPrompt, payload, withJson, opts);
+  }
   if (!res.ok) {
     throw new Error(`AI request failed (${res.status} ${MODEL})`);
   }

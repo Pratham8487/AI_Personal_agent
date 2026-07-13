@@ -17,7 +17,7 @@ export default function DashboardLayout({
         <div className="aurora-blob -bottom-48 left-1/3 bg-blue-500/10 [animation-delay:-13s] dark:bg-blue-600/10" />
       </div>
       <Sidebar />
-      <div className="relative z-10 flex min-h-screen flex-1 flex-col">
+      <div className="relative z-10 flex h-screen flex-1 flex-col">
         <DashboardHeader />
         <main className="flex-1 overflow-y-auto p-6 lg:p-8">{children}</main>
       </div>

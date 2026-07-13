@@ -3,5 +3,5 @@ export default function Template({
 }: {
   children: React.ReactNode;
 }) {
-  return <div className="animate-fade-up">{children}</div>;
+  return <div className="h-full animate-fade-up">{children}</div>;
 }
