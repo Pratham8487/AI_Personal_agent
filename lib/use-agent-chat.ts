@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { apiFetch } from "./auth-client";
 
 export type AgentChatMessage = {
   id: string;
@@ -48,7 +49,7 @@ export function useAgentChat(userId: string | undefined) {
   useEffect(() => {
     if (!userId) return;
     let active = true;
-    fetch("/api/agent/history", {
+    apiFetch("/api/agent/history", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId }),
@@ -107,7 +108,7 @@ export function useAgentChat(userId: string | undefined) {
       let failure: string | null = null;
 
       try {
-        const res = await fetch("/api/agent/chat", {
+        const res = await apiFetch("/api/agent/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -210,7 +211,7 @@ export function useAgentChat(userId: string | undefined) {
     setIsStreaming(false);
     conversationRef.current = null;
     try {
-      const res = await fetch("/api/agent/new", {
+      const res = await apiFetch("/api/agent/new", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId }),

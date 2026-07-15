@@ -1,5 +1,5 @@
 import { GMAIL_MCP_TOOLS, callGmailTool } from "@/lib/server/gmail-mcp";
-import { adminSql } from "@/lib/server/phone-auth";
+import { adminSql } from "@/lib/server/db";
 import { WHATSAPP_MCP_TOOLS, callWhatsappTool } from "@/lib/server/whatsapp-mcp";
 
 /**

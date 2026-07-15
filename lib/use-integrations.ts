@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useReducer, useState } from "react";
+import { apiFetch } from "./auth-client";
 import { errorMessage } from "./error-message";
-import { insforge } from "./insforge";
 
 export type IntegrationStatus = {
   status: string;
@@ -17,9 +17,10 @@ const SAVE_ERROR = "Could not save your connection. Please retry.";
 
 /**
  * Statuses per user, kept across page navigations so returning to a page
- * paints instantly instead of refetching (and possibly hanging on a slow
- * backend). Connect/disconnect update it; the OAuth redirect fully reloads
- * the app, which clears it and refetches.
+ * paints instantly instead of refetching. Connect/disconnect update it; the
+ * OAuth redirect fully reloads the app, which clears it and refetches.
+ * The userId key is purely a client-side cache key — the server derives the
+ * real user from the session cookie.
  */
 const statusCache = new Map<string, StatusMap>();
 
@@ -33,30 +34,30 @@ export function useIntegrations(userId: string | undefined) {
   useEffect(() => {
     if (!userId || statusCache.has(userId)) return;
     let active = true;
-    insforge.database
-      .from("user_integrations")
-      .select("provider,status,connected_at")
-      .eq("user_id", userId)
-      .then(({ data, error }) => {
+    apiFetch("/api/integrations/status")
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`status ${res.status}`);
+        return (await res.json()) as {
+          integrations: { provider: string; status: string; connected_at: string | null }[];
+        };
+      })
+      .then((data) => {
         if (!active) return;
-        if (error) {
-          console.error(
-            "Failed to load integrations:",
-            error.message || "unknown error",
-          );
-          setLoadError("Could not load your integrations.");
-          return;
-        }
         const map: StatusMap = {};
-        for (const row of data ?? []) {
-          map[row.provider as string] = {
-            status: row.status as string,
-            connected_at: (row.connected_at as string | null) ?? null,
+        for (const row of data.integrations) {
+          map[row.provider] = {
+            status: row.status,
+            connected_at: row.connected_at ?? null,
           };
         }
         statusCache.set(userId, map);
         setLoadError(null);
         bump();
+      })
+      .catch((error) => {
+        if (!active) return;
+        console.error("Failed to load integrations:", errorMessage(error));
+        setLoadError("Could not load your integrations.");
       });
     return () => {
       active = false;
@@ -76,38 +77,16 @@ export function useIntegrations(userId: string | undefined) {
   const setStatus = useCallback(
     async (providerId: string, status: "connected" | "disconnected") => {
       if (!userId) return;
-      const now = new Date().toISOString();
-      const connectedAt = status === "connected" ? now : null;
-
-      const { data: existing, error: selectError } = await insforge.database
-        .from("user_integrations")
-        .select("id")
-        .eq("user_id", userId)
-        .eq("provider", providerId)
-        .maybeSingle();
-      if (selectError) throw selectError;
-
-      if (existing) {
-        const { error } = await insforge.database
-          .from("user_integrations")
-          .update({ status, connected_at: connectedAt, updated_at: now })
-          .eq("id", existing.id as string);
-        if (error) throw error;
-      } else {
-        const { error } = await insforge.database
-          .from("user_integrations")
-          .insert([
-            {
-              user_id: userId,
-              provider: providerId,
-              status,
-              connected_at: connectedAt,
-            },
-          ]);
-        if (error) throw error;
-      }
-
-      applyStatus(userId, providerId, status, connectedAt);
+      const res = await apiFetch("/api/integrations/status", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider: providerId, status }),
+      });
+      if (!res.ok) throw new Error(`integration update failed (${res.status})`);
+      const data = (await res.json()) as {
+        integration: { status: string; connected_at: string | null };
+      };
+      applyStatus(userId, providerId, data.integration.status, data.integration.connected_at);
     },
     [userId, applyStatus],
   );
@@ -136,9 +115,10 @@ export function useIntegrations(userId: string | undefined) {
       if (!userId || pending[providerId]) return;
       if (providerId === "gmail") {
         // Google's consent flow finishes at /api/integrations/gmail/callback,
-        // which stores the tokens server-side and flips the DB status.
+        // which stores the tokens server-side and flips the DB status. The
+        // auth route derives the user from the session cookie.
         setPending((prev) => ({ ...prev, gmail: true }));
-        window.location.assign(`/api/integrations/gmail/auth?uid=${userId}`);
+        window.location.assign("/api/integrations/gmail/auth");
         return;
       }
       // WhatsApp connects through the pairing dialog, not a status flip.
@@ -154,7 +134,7 @@ export function useIntegrations(userId: string | undefined) {
       const uid = userId;
       await run(providerId, async () => {
         if (providerId === "gmail") {
-          const res = await fetch("/api/integrations/gmail/disconnect", {
+          const res = await apiFetch("/api/integrations/gmail/disconnect", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ userId: uid }),
@@ -164,7 +144,7 @@ export function useIntegrations(userId: string | undefined) {
           return;
         }
         if (providerId === "whatsapp") {
-          const res = await fetch("/api/integrations/whatsapp/disconnect", {
+          const res = await apiFetch("/api/integrations/whatsapp/disconnect", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ userId: uid }),

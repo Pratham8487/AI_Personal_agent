@@ -1,5 +1,5 @@
 import pino from "pino";
-import { adminSql } from "./phone-auth";
+import { adminSql } from "./db";
 import { loadBaileys } from "./whatsapp-baileys";
 import {
   clearAuthState,
@@ -125,15 +125,11 @@ export async function markWhatsappStatus(
   );
 }
 
-/** whatsapp_auth_state references public.users; the client-side mirror of
- * auth.users can lag, so guarantee the row first (same as Gmail). */
+/** whatsapp_auth_state references public.users; guarantee the row first
+ * (same FK guard as Gmail — signup writes public.users directly). */
 async function ensureUserRecord(userId: string): Promise<void> {
   await adminSql(
-    `INSERT INTO public.users (id, email, name, email_verified)
-     SELECT a.id, a.email, a.profile->>'name', a.email_verified
-     FROM auth.users a
-     WHERE a.id = $1
-     ON CONFLICT (id) DO NOTHING`,
+    `INSERT INTO public.users (id) VALUES ($1) ON CONFLICT (id) DO NOTHING`,
     [userId],
   );
 }

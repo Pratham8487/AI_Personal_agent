@@ -1,16 +1,19 @@
 import { runAgentChat, type AgentStreamEvent } from "@/lib/server/agent/service";
 import { aiConfigured } from "@/lib/server/brief-ai";
 import { isUuid } from "@/lib/server/gmail-oauth";
+import { getSessionUser, unauthorized } from "@/lib/server/session";
 
 const MAX_MESSAGE_CHARS = 4_000;
 
 /**
- * POST { userId, message, conversationId? } → NDJSON stream of
+ * POST { message, conversationId? } → NDJSON stream of
  * AgentStreamEvent lines (meta, status, delta, suggestions, done, error).
  */
 export async function POST(request: Request) {
+  const user = await getSessionUser();
+  if (!user) return unauthorized();
+
   let body: {
-    userId?: string;
     conversationId?: string | null;
     message?: string;
   };
@@ -20,10 +23,6 @@ export async function POST(request: Request) {
     return Response.json({ error: "Invalid JSON body." }, { status: 400 });
   }
 
-  const userId = body.userId ?? "";
-  if (!isUuid(userId)) {
-    return Response.json({ error: "Invalid user id." }, { status: 400 });
-  }
   const message = typeof body.message === "string" ? body.message.trim() : "";
   if (!message || message.length > MAX_MESSAGE_CHARS) {
     return Response.json({ error: "Invalid message." }, { status: 400 });
@@ -45,7 +44,7 @@ export async function POST(request: Request) {
       const emit = (event: AgentStreamEvent) =>
         controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
       try {
-        await runAgentChat({ userId, conversationId, message, emit });
+        await runAgentChat({ userId: user.id, conversationId, message, emit });
       } catch (error) {
         console.error("Agent chat failed:", error);
         emit({

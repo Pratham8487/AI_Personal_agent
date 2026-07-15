@@ -1,5 +1,5 @@
 import type { RefreshQuota } from "@/lib/dashboard-brief-types";
-import { adminSql } from "@/lib/server/phone-auth";
+import { adminSql } from "@/lib/server/db";
 
 /**
  * Generic, persisted rolling-window limiter for expensive AI operations.

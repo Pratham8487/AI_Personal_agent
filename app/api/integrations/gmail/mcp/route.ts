@@ -7,14 +7,14 @@ import {
 import {
   GmailNotConfiguredError,
   GmailNotConnectedError,
-  isUuid,
 } from "@/lib/server/gmail-oauth";
+import { getSessionUser } from "@/lib/server/session";
 
 /**
- * MCP server (Streamable HTTP, stateless) exposing the user's Gmail
- * connection. Point any MCP client at:
+ * MCP server (Streamable HTTP, stateless) exposing the signed-in user's
+ * Gmail connection. Authenticated by the session cookie:
  *
- *   POST /api/integrations/gmail/mcp?uid=<user-uuid>
+ *   POST /api/integrations/gmail/mcp
  */
 
 const SUPPORTED_PROTOCOL_VERSIONS = ["2025-06-18", "2025-03-26", "2024-11-05"];
@@ -112,12 +112,13 @@ async function handleMessage(uid: string, message: JsonRpcMessage) {
 }
 
 export async function POST(request: Request) {
-  const uid = new URL(request.url).searchParams.get("uid") ?? "";
-  if (!isUuid(uid)) {
-    return Response.json(rpcError(null, -32000, "Invalid or missing uid."), {
-      status: 400,
+  const user = await getSessionUser();
+  if (!user) {
+    return Response.json(rpcError(null, -32000, "Not signed in."), {
+      status: 401,
     });
   }
+  const uid = user.id;
 
   let body: unknown;
   try {

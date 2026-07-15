@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from "crypto";
-import { adminSql } from "./phone-auth";
+import { adminSql } from "./db";
 
 const CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
@@ -122,17 +122,13 @@ export function exchangeCode(
 }
 
 /**
- * The client mirrors auth users into public.users after sign-in, but that
- * sync can fail (e.g. a timeout). gmail_oauth_tokens references
- * public.users, so guarantee the row exists before saving tokens.
+ * gmail_oauth_tokens references public.users, so guarantee the row exists
+ * before saving tokens. Signup writes public.users directly, so this is only
+ * a FK guard for edge cases.
  */
 async function ensureUserRecord(userId: string): Promise<void> {
   await adminSql(
-    `INSERT INTO public.users (id, email, name, email_verified)
-     SELECT a.id, a.email, a.profile->>'name', a.email_verified
-     FROM auth.users a
-     WHERE a.id = $1
-     ON CONFLICT (id) DO NOTHING`,
+    `INSERT INTO public.users (id) VALUES ($1) ON CONFLICT (id) DO NOTHING`,
     [userId],
   );
 }

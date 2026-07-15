@@ -16,7 +16,7 @@ import PriorityItemsCard from "@/components/dashboard/priority-items-card";
 import StatCard from "@/components/dashboard/stat-card";
 import Toast from "@/components/dashboard/toast";
 import TodaysBriefCard from "@/components/dashboard/todays-brief-card";
-import { userDisplayName } from "@/lib/auth";
+import { userDisplayName } from "@/lib/auth-client";
 import { STATUS_CONNECTED } from "@/lib/integrations";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { useDashboardData } from "@/lib/use-dashboard-brief";

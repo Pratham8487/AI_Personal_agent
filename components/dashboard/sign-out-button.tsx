@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Logout03Icon } from "@hugeicons/core-free-icons";
-import { insforge } from "@/lib/insforge";
+import { signOut } from "@/lib/auth-client";
 import { useCurrentUser } from "@/lib/use-current-user";
 
 export default function SignOutButton() {
@@ -14,7 +14,7 @@ export default function SignOutButton() {
 
   async function handleSignOut() {
     setIsSigningOut(true);
-    await insforge.auth.signOut();
+    await signOut();
     // Full navigation so every client hook drops its cached user state.
     window.location.assign("/sign-in");
   }

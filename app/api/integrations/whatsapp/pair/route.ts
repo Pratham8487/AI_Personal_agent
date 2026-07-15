@@ -1,5 +1,5 @@
-import { isUuid } from "@/lib/server/gmail-oauth";
 import { normalizePhone } from "@/lib/server/phone-auth";
+import { getSessionUser, unauthorized } from "@/lib/server/session";
 import {
   WhatsAppAlreadyLinkedError,
   beginPairing,
@@ -8,15 +8,14 @@ import {
 
 /** Starts a pairing attempt: numeric linking code, or QR when mode=qr. */
 export async function POST(request: Request) {
-  let body: { userId?: string; phone?: string; mode?: string };
+  const user = await getSessionUser();
+  if (!user) return unauthorized();
+
+  let body: { phone?: string; mode?: string };
   try {
     body = await request.json();
   } catch {
     return Response.json({ error: "Invalid request body." }, { status: 400 });
-  }
-  const userId = body.userId ?? "";
-  if (!isUuid(userId)) {
-    return Response.json({ error: "Invalid user id." }, { status: 400 });
   }
 
   const phone = body.mode === "qr" ? null : normalizePhone(body.phone ?? "");
@@ -29,10 +28,10 @@ export async function POST(request: Request) {
 
   try {
     if (body.mode === "qr") {
-      const { qr } = await beginQrPairing(userId);
+      const { qr } = await beginQrPairing(user.id);
       return Response.json({ qr });
     }
-    const { pairingCode, expiresAt } = await beginPairing(userId, phone as string);
+    const { pairingCode, expiresAt } = await beginPairing(user.id, phone as string);
     return Response.json({ pairingCode, expiresAt });
   } catch (error) {
     if (error instanceof WhatsAppAlreadyLinkedError) {

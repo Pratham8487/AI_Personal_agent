@@ -3,8 +3,12 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { insforge } from "@/lib/insforge";
-import { signInWithGoogle, syncUserToDatabase } from "@/lib/auth";
+import {
+  isValidEmail,
+  PASSWORD_MIN_LENGTH,
+  signInWithGoogle,
+  signUp,
+} from "@/lib/auth-client";
 import AuthCard from "./auth-card";
 import AuthDivider from "./auth-divider";
 import FormError from "./form-error";
@@ -22,57 +26,55 @@ export default function SignUpForm() {
   const [password, setPassword] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [step, setStep] = useState<"details" | "verify">("details");
   const [phoneMode, setPhoneMode] = useState(false);
+  const [verifyEmailFor, setVerifyEmailFor] = useState<string | null>(null);
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    setPending(true);
     setError(null);
 
-    const { data, error: signUpError } = await insforge.auth.signUp({
+    if (!isValidEmail(email)) {
+      setError("Enter a valid email address, e.g. you@example.com.");
+      return;
+    }
+    if (password.length < PASSWORD_MIN_LENGTH) {
+      setError(`Password must be at least ${PASSWORD_MIN_LENGTH} characters.`);
+      return;
+    }
+
+    setPending(true);
+    const { user, error: signUpError } = await signUp({
       email,
       password,
       name: name.trim() || undefined,
     });
 
-    if (signUpError || !data) {
-      setError(signUpError?.message ?? "Unable to sign up. Please try again.");
+    if (!user) {
+      setError(signUpError ?? "Unable to sign up. Please try again.");
       setPending(false);
       return;
     }
-
-    if (data.requireEmailVerification) {
-      setStep("verify");
-      setPending(false);
-      return;
-    }
-
-    // Email verification disabled: user is signed in right away.
-    if (data.user) {
-      const { error: syncError } = await syncUserToDatabase(data.user);
-      if (syncError) console.error("Failed to sync user record:", syncError);
-    }
-    router.replace("/");
+    // Signed in already (grace model); show the verify step before entering.
+    setVerifyEmailFor(email);
+    setPending(false);
   }
 
-  async function handleGoogle() {
+  function handleGoogle() {
     setError(null);
-    const oauthError = await signInWithGoogle();
-    if (oauthError) setError(oauthError.message);
+    signInWithGoogle(); // full-page redirect
   }
 
   if (phoneMode) {
     return <PhoneAuthForm collectName onBack={() => setPhoneMode(false)} />;
   }
 
-  if (step === "verify") {
+  if (verifyEmailFor) {
     return (
       <AuthCard
         title="Check your email"
-        subtitle={`We sent a 6-digit code to ${email}. Enter it below to verify your account.`}
+        subtitle={`We sent a 6-digit code to ${verifyEmailFor}. Enter it below to verify your account.`}
       >
-        <VerifyEmailForm email={email} />
+        <VerifyEmailForm email={verifyEmailFor} />
       </AuthCard>
     );
   }

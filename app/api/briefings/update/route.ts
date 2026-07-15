@@ -5,13 +5,17 @@ import {
 import { getDefinition, updateDefinition } from "@/lib/server/briefing/store";
 import { parseDefinitionInput } from "@/lib/server/briefing/validate";
 import { isUuid } from "@/lib/server/gmail-oauth";
+import { getSessionUser, unauthorized } from "@/lib/server/session";
 
 /**
- * Updates a briefing. Body: { userId, briefingId, enabled?, ...input }.
+ * Updates a briefing. Body: { briefingId, enabled?, ...input }.
  * The default row's name and schedule stay managed by user_settings; only
  * its content fields (apps, categories, priority) and enabled are applied.
  */
 export async function POST(request: Request) {
+  const user = await getSessionUser();
+  if (!user) return unauthorized();
+
   let body: Record<string, unknown>;
   try {
     body = await request.json();
@@ -19,9 +23,8 @@ export async function POST(request: Request) {
     return Response.json({ error: "Invalid request body." }, { status: 400 });
   }
 
-  const userId = typeof body.userId === "string" ? body.userId : "";
   const briefingId = typeof body.briefingId === "string" ? body.briefingId : "";
-  if (!isUuid(userId) || !isUuid(briefingId)) {
+  if (!isUuid(briefingId)) {
     return Response.json({ error: "Invalid id." }, { status: 400 });
   }
   const parsed = parseDefinitionInput(body);
@@ -30,7 +33,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const existing = await getDefinition(userId, briefingId);
+    const existing = await getDefinition(user.id, briefingId);
     if (!existing) {
       return Response.json({ error: "Briefing not found." }, { status: 404 });
     }
@@ -42,7 +45,7 @@ export async function POST(request: Request) {
       input = { ...parsed.input, timezone: computed.timezone };
     }
     const briefing = await updateDefinition(
-      userId,
+      user.id,
       briefingId,
       input,
       nextRunAt,

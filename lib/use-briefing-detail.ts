@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { apiFetch } from "./auth-client";
 import {
   sanitizeGeneratedBriefing,
   type GeneratedBriefing,
@@ -53,9 +54,7 @@ export function useBriefingDetail(
       return;
     }
     let active = true;
-    fetch(
-      `/api/briefings/results?userId=${encodeURIComponent(userId)}&id=${encodeURIComponent(briefingId)}`,
-    )
+    apiFetch(`/api/briefings/results?id=${encodeURIComponent(briefingId)}`)
       .then(async (res) => {
         const body: unknown = await res.json().catch(() => null);
         if (!active) return;

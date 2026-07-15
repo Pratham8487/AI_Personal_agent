@@ -4,8 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { DashboardSquare01Icon } from "@hugeicons/core-free-icons";
-import { userDisplayName } from "@/lib/auth";
-import { insforge } from "@/lib/insforge";
+import { signOut, userDisplayName } from "@/lib/auth-client";
 import { useCurrentUser } from "@/lib/use-current-user";
 import Logo from "./logo";
 import { MenuIcon, XIcon } from "./icons";
@@ -22,7 +21,7 @@ export default function Header() {
   const { user, setUser } = useCurrentUser();
 
   async function handleSignOut() {
-    await insforge.auth.signOut();
+    await signOut();
     setUser(null);
     setMenuOpen(false);
   }

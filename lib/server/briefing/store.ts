@@ -11,7 +11,7 @@ import {
   BRIEFING_FREQUENCIES,
 } from "@/lib/briefing-types";
 import type { PriorityLevel } from "@/lib/dashboard-brief-types";
-import { adminSql } from "@/lib/server/phone-auth";
+import { adminSql } from "@/lib/server/db";
 import { ensureBriefingTables } from "./schema";
 
 /** Rows kept per briefing; older results are pruned on insert. */

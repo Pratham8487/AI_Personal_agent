@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { apiFetch } from "@/lib/auth-client";
 import GmailToolRunner, { type McpTool } from "./gmail-tool-runner";
 
 /** Lists the Gmail tools by calling the MCP endpoint (tools/list). */
@@ -11,7 +12,7 @@ export default function GmailMcpTools({ userId }: { userId: string }) {
 
   useEffect(() => {
     let active = true;
-    fetch(`/api/integrations/gmail/mcp?uid=${userId}`, {
+    apiFetch(`/api/integrations/gmail/mcp?uid=${userId}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { apiFetch } from "./auth-client";
 import {
   sanitizeBriefingDefinition,
   sanitizeBriefingSummaries,
@@ -121,7 +122,7 @@ export function useBriefings(
       return;
     }
     let active = true;
-    fetch("/api/briefings/overview", {
+    apiFetch("/api/briefings/overview", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId }),
@@ -185,7 +186,7 @@ export function useBriefings(
       if (!userId) return null;
       setSavingError(null);
       try {
-        const res = await fetch("/api/briefings", {
+        const res = await apiFetch("/api/briefings", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ userId, ...input }),
@@ -225,7 +226,7 @@ export function useBriefings(
       if (!userId) return null;
       setSavingError(null);
       try {
-        const res = await fetch("/api/briefings/update", {
+        const res = await apiFetch("/api/briefings/update", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ userId, briefingId, enabled: enabledFlag, ...input }),
@@ -257,7 +258,7 @@ export function useBriefings(
       if (!userId) return false;
       setSavingError(null);
       try {
-        const res = await fetch("/api/briefings/delete", {
+        const res = await apiFetch("/api/briefings/delete", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ userId, briefingId }),
@@ -288,7 +289,7 @@ export function useBriefings(
       setLimitNotice(null);
       setGeneratingId(briefingId);
       try {
-        const res = await fetch("/api/briefings/generate", {
+        const res = await apiFetch("/api/briefings/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ userId, briefingId }),

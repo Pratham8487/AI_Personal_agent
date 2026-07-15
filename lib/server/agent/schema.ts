@@ -1,4 +1,4 @@
-import { adminSql } from "@/lib/server/phone-auth";
+import { adminSql } from "@/lib/server/db";
 
 /**
  * Lazy one-time table setup per process (same convention as

@@ -8,6 +8,7 @@ import {
   secondaryButtonClass,
 } from "@/components/dashboard/form-classes";
 import Modal from "@/components/dashboard/modal";
+import { apiFetch } from "@/lib/auth-client";
 import type { BriefingItem } from "@/lib/briefing-types";
 import {
   CheckmarkCircle02Icon,
@@ -62,7 +63,7 @@ export default function ComposeDialog({
 
   useEffect(() => {
     let active = true;
-    fetch("/api/briefings/compose", {
+    apiFetch("/api/briefings/compose", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -134,7 +135,7 @@ export default function ComposeDialog({
     setPhase("sending");
     setError(null);
     try {
-      const res = await fetch("/api/briefings/send", {
+      const res = await apiFetch("/api/briefings/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

@@ -1,4 +1,4 @@
-import { adminSql } from "./phone-auth";
+import { adminSql } from "./db";
 import { loadBaileys } from "./whatsapp-baileys";
 import type { AuthenticationState, SignalDataTypeMap } from "baileys";
 

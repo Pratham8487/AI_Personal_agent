@@ -1,18 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { UserSchema } from "@insforge/sdk";
-import { insforge } from "./insforge";
+import { getCurrentUser, type AuthUser } from "./auth-client";
 
 export function useCurrentUser() {
-  const [user, setUser] = useState<UserSchema | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
     let active = true;
-    insforge.auth.getCurrentUser().then(({ data }) => {
+    getCurrentUser().then((current) => {
       if (!active) return;
-      setUser(data?.user ?? null);
+      setUser(current);
       setIsLoaded(true);
     });
     return () => {

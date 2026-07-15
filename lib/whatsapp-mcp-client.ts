@@ -1,3 +1,5 @@
+import { apiFetch } from "./auth-client";
+
 export type WhatsappMcpCall = { name: string; args?: Record<string, unknown> };
 
 export type WhatsappMcpResult = {
@@ -44,7 +46,7 @@ export async function callWhatsappMcpBatch(
     method: "tools/call",
     params: { name: call.name, arguments: call.args ?? {} },
   }));
-  const res = await fetch(`/api/integrations/whatsapp/mcp?uid=${userId}`, {
+  const res = await apiFetch(`/api/integrations/whatsapp/mcp?uid=${userId}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(batch),

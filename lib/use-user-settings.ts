@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useReducer, useState } from "react";
+import { apiFetch } from "./auth-client";
 import { errorMessage } from "./error-message";
-import { insforge } from "./insforge";
 
 export type DeliveryChannels = {
   in_app: boolean;
@@ -18,11 +18,10 @@ export type UserSettings = {
   channels: DeliveryChannels;
 };
 
-/** Settings per user, kept across navigations (same pattern as integrations). */
+/** Settings per user, kept across navigations (same pattern as integrations).
+ * The userId key is purely a client-side cache key — the server derives the
+ * real user from the session cookie. */
 const settingsCache = new Map<string, UserSettings>();
-
-/** Users known to have a user_settings row, so saves skip the existence check. */
-const persisted = new Set<string>();
 
 function detectTimezone(): string {
   try {
@@ -52,27 +51,33 @@ export function useUserSettings(userId: string | undefined) {
   useEffect(() => {
     if (!userId || settingsCache.has(userId)) return;
     let active = true;
-    insforge.database
-      .from("user_settings")
-      .select("briefing_time,timezone,language,channels")
-      .eq("user_id", userId)
-      .maybeSingle()
-      .then(({ data, error }) => {
+    apiFetch("/api/settings")
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`status ${res.status}`);
+        return (await res.json()) as {
+          settings: {
+            briefing_time?: string;
+            timezone?: string;
+            language?: string;
+            channels?: unknown;
+          } | null;
+        };
+      })
+      .then(({ settings: data }) => {
         if (!active) return;
-        if (error) {
-          console.error("Failed to load settings:", errorMessage(error));
-          setLoadError("Could not load your settings.");
-          return;
-        }
-        if (data) persisted.add(userId);
         settingsCache.set(userId, {
-          briefing_time: (data?.briefing_time as string | undefined) ?? "08:00",
-          timezone: (data?.timezone as string | undefined) ?? detectTimezone(),
-          language: (data?.language as string | undefined) ?? "English",
+          briefing_time: data?.briefing_time ?? "08:00",
+          timezone: data?.timezone ?? detectTimezone(),
+          language: data?.language ?? "English",
           channels: parseChannels(data?.channels),
         });
         setLoadError(null);
         bump();
+      })
+      .catch((error) => {
+        if (!active) return;
+        console.error("Failed to load settings:", errorMessage(error));
+        setLoadError("Could not load your settings.");
       });
     return () => {
       active = false;
@@ -95,34 +100,12 @@ export function useUserSettings(userId: string | undefined) {
       setIsSaving(true);
       setSaveError(null);
       try {
-        const record = {
-          briefing_time: next.briefing_time,
-          timezone: next.timezone,
-          language: next.language,
-          channels: next.channels,
-          updated_at: new Date().toISOString(),
-        };
-        const saveUpdate = async () => {
-          const { error } = await insforge.database
-            .from("user_settings")
-            .update(record)
-            .eq("user_id", userId);
-          if (error) throw error;
-        };
-        if (persisted.has(userId)) {
-          await saveUpdate();
-        } else {
-          const { error } = await insforge.database
-            .from("user_settings")
-            .insert([{ user_id: userId, ...record }]);
-          // The row may exist from another tab/session — fall back to update.
-          if (error && errorMessage(error).includes("duplicate")) {
-            await saveUpdate();
-          } else if (error) {
-            throw error;
-          }
-          persisted.add(userId);
-        }
+        const res = await apiFetch("/api/settings", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(next),
+        });
+        if (!res.ok) throw new Error(`status ${res.status}`);
       } catch (error) {
         console.error("Failed to save settings:", errorMessage(error));
         settingsCache.set(userId, current);

@@ -1,21 +1,16 @@
-import {
-  buildAuthUrl,
-  gmailOauthConfigured,
-  isUuid,
-} from "@/lib/server/gmail-oauth";
+import { buildAuthUrl, gmailOauthConfigured } from "@/lib/server/gmail-oauth";
+import { getSessionUser } from "@/lib/server/session";
 
 /**
  * Starts the Google OAuth consent flow. The browser navigates here directly,
  * so failures redirect back to /integrations with an error code instead of JSON.
+ * The user is derived from the session cookie, never from the query string.
  */
 export async function GET(request: Request) {
   const url = new URL(request.url);
-  const uid = url.searchParams.get("uid") ?? "";
-  if (!isUuid(uid)) {
-    return Response.redirect(
-      new URL("/integrations?gmail_error=invalid_user", request.url),
-      302,
-    );
+  const user = await getSessionUser();
+  if (!user) {
+    return Response.redirect(new URL("/sign-in", request.url), 302);
   }
   if (!gmailOauthConfigured()) {
     return Response.redirect(
@@ -23,5 +18,5 @@ export async function GET(request: Request) {
       302,
     );
   }
-  return Response.redirect(buildAuthUrl(uid, url.origin), 302);
+  return Response.redirect(buildAuthUrl(user.id, url.origin), 302);
 }

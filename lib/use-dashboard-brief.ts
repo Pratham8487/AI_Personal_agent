@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { apiFetch } from "./auth-client";
 import { sanitizeDashboard, type DashboardData } from "./dashboard-brief-types";
 
 export type BriefStatus = "idle" | "loading" | "error" | "ready";
@@ -62,7 +63,7 @@ export function useDashboardData(
     }
     let active = true;
     if (force) setIsRegenerating(true);
-    fetch("/api/dashboard", {
+    apiFetch("/api/dashboard", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId, force }),

@@ -1,14 +1,13 @@
-import { isUuid } from "@/lib/server/gmail-oauth";
+import { getSessionUser, unauthorized } from "@/lib/server/session";
 import { getStatus } from "@/lib/server/whatsapp-manager";
 
 /** Connection status; the pairing dialog polls this until linked. */
-export async function GET(request: Request) {
-  const uid = new URL(request.url).searchParams.get("uid") ?? "";
-  if (!isUuid(uid)) {
-    return Response.json({ error: "Invalid user id." }, { status: 400 });
-  }
+export async function GET() {
+  const user = await getSessionUser();
+  if (!user) return unauthorized();
+
   try {
-    return Response.json(await getStatus(uid));
+    return Response.json(await getStatus(user.id));
   } catch (error) {
     console.error("WhatsApp status failed:", error);
     return Response.json(

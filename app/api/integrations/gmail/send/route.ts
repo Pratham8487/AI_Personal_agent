@@ -2,14 +2,16 @@ import { sendEmail } from "@/lib/server/gmail-api";
 import {
   GmailNotConfiguredError,
   GmailNotConnectedError,
-  isUuid,
 } from "@/lib/server/gmail-oauth";
+import { getSessionUser, unauthorized } from "@/lib/server/session";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export async function POST(request: Request) {
+  const user = await getSessionUser();
+  if (!user) return unauthorized();
+
   let body: {
-    userId?: string;
     to?: string;
     subject?: string;
     body?: string;
@@ -20,14 +22,10 @@ export async function POST(request: Request) {
     return Response.json({ error: "Invalid request body." }, { status: 400 });
   }
 
-  const userId = body.userId ?? "";
   const to = (body.to ?? "").trim();
   const subject = (body.subject ?? "").trim();
   const text = (body.body ?? "").trim();
 
-  if (!isUuid(userId)) {
-    return Response.json({ error: "Invalid user id." }, { status: 400 });
-  }
   if (!EMAIL_PATTERN.test(to)) {
     return Response.json(
       { error: "Enter a valid recipient email address." },
@@ -45,7 +43,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    await sendEmail(userId, to, subject, text);
+    await sendEmail(user.id, to, subject, text);
     return Response.json({ success: true });
   } catch (error) {
     if (error instanceof GmailNotConfiguredError) {

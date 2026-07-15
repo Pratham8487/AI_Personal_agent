@@ -1,8 +1,5 @@
 "use client";
 
-import { PlusSignIcon, SentIcon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
-import { useEffect, useRef, useState } from "react";
 import ChatMessage from "@/components/agent/chat-message";
 import RecentSummary from "@/components/agent/recent-summary";
 import SuggestionChips from "@/components/agent/suggestion-chips";
@@ -13,6 +10,9 @@ import { PROVIDERS, STATUS_CONNECTED } from "@/lib/integrations";
 import { useAgentChat } from "@/lib/use-agent-chat";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { useIntegrations } from "@/lib/use-integrations";
+import { PlusSignIcon, SentIcon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { useEffect, useRef, useState } from "react";
 
 const STARTER_CHIPS = [
   "What are my important updates today?",
@@ -26,8 +26,14 @@ const STARTER_CHIPS = [
 export default function AgentPage() {
   const { user, isLoaded } = useCurrentUser();
   const { statuses } = useIntegrations(user?.id);
-  const { messages, historyLoaded, isStreaming, toolStatus, send, newConversation } =
-    useAgentChat(user?.id);
+  const {
+    messages,
+    historyLoaded,
+    isStreaming,
+    toolStatus,
+    send,
+    newConversation,
+  } = useAgentChat(user?.id);
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -77,7 +83,7 @@ export default function AgentPage() {
         enabled={Boolean(user) && hasLiveSource}
       />
 
-      <Card className="flex min-h-0 flex-1 flex-col">
+      <Card className="flex flex-1 flex-col">
         <div
           ref={scrollRef}
           className="no-scrollbar min-h-0 flex-1 space-y-4 overflow-y-auto pr-1"
@@ -130,9 +136,7 @@ export default function AgentPage() {
                 <ChatMessage
                   key={message.id}
                   message={message}
-                  toolStatus={
-                    index === messages.length - 1 ? toolStatus : null
-                  }
+                  toolStatus={index === messages.length - 1 ? toolStatus : null}
                 />
               ))}
               {quickReplies.length > 0 && (

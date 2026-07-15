@@ -7,7 +7,7 @@ import {
   type RefreshQuota,
 } from "@/lib/dashboard-brief-types";
 import { generateAiBrief } from "@/lib/server/brief-ai";
-import { adminSql } from "@/lib/server/phone-auth";
+import { adminSql } from "@/lib/server/db";
 import {
   envInt,
   getRefreshQuota,

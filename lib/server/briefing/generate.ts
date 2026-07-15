@@ -13,7 +13,7 @@ import {
   type ProviderSnapshot,
 } from "@/lib/server/dashboard/provider";
 import { DASHBOARD_PROVIDERS } from "@/lib/server/dashboard/registry";
-import { adminSql } from "@/lib/server/phone-auth";
+import { adminSql } from "@/lib/server/db";
 import { generateAiBriefingResult } from "./ai";
 
 /** Per-provider fetch budget; a slow provider degrades, never blocks. */

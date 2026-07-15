@@ -1,22 +1,18 @@
+import { adminSql } from "@/lib/server/db";
+import { verifyOtp } from "@/lib/server/otp";
+import { normalizePhone, upsertPhoneUser } from "@/lib/server/phone-auth";
+import { assertSameOrigin } from "@/lib/server/request-origin";
 import {
-  adminSql,
-  derivePassword,
-  ensurePhoneUser,
-  normalizePhone,
-  OTP_MAX_ATTEMPTS,
-  otpMatches,
-  savePhoneUserRecord,
-  shadowEmail,
-} from "@/lib/server/phone-auth";
-
-interface OtpRow {
-  id: string;
-  otp_hash: string;
-  attempts: number;
-  expired: boolean;
-}
+  createSessionTokens,
+  getRequestMeta,
+  setAuthCookies,
+  type SessionUser,
+} from "@/lib/server/session";
 
 export async function POST(request: Request) {
+  const crossOrigin = assertSameOrigin(request);
+  if (crossOrigin) return crossOrigin;
+
   let body: { phone?: string; otp?: string; name?: string };
   try {
     body = await request.json();
@@ -31,47 +27,58 @@ export async function POST(request: Request) {
   }
 
   try {
-    const rows = await adminSql<OtpRow>(
-      `SELECT id, otp_hash, attempts, expires_at < now() AS expired
-       FROM public.phone_otps
-       WHERE phone = $1 AND consumed_at IS NULL
-       ORDER BY created_at DESC LIMIT 1`,
-      [phone]
-    );
-    const record = rows[0];
-
-    if (!record || record.expired) {
-      return Response.json(
-        { error: "This code has expired. Please request a new one." },
-        { status: 400 }
-      );
-    }
-    if (record.attempts >= OTP_MAX_ATTEMPTS) {
-      await adminSql("UPDATE public.phone_otps SET consumed_at = now() WHERE id = $1", [record.id]);
-      return Response.json(
-        { error: "Too many attempts. Please request a new code." },
-        { status: 429 }
-      );
-    }
-    if (!otpMatches(phone, otp, record.otp_hash)) {
-      await adminSql("UPDATE public.phone_otps SET attempts = attempts + 1 WHERE id = $1", [
-        record.id,
-      ]);
+    const result = await verifyOtp("PHONE_VERIFICATION", phone, otp);
+    if (!result.ok) {
+      if (result.reason === "expired") {
+        return Response.json(
+          { error: "This code has expired. Please request a new one." },
+          { status: 400 }
+        );
+      }
+      if (result.reason === "too_many_attempts") {
+        return Response.json(
+          { error: "Too many attempts. Please request a new code." },
+          { status: 429 }
+        );
+      }
       return Response.json({ error: "Incorrect code. Please try again." }, { status: 400 });
     }
 
-    await adminSql("UPDATE public.phone_otps SET consumed_at = now() WHERE id = $1", [record.id]);
-
     const name = typeof body.name === "string" ? body.name.trim() || undefined : undefined;
-    const userId = await ensurePhoneUser(phone, name);
-    await savePhoneUserRecord(userId, phone, name);
+    const userId = await upsertPhoneUser(phone, name);
 
-    // Credentials for the SDK to open a native session in the browser.
-    // Only obtainable through a successfully verified OTP for this phone.
-    return Response.json({
-      email: shadowEmail(phone),
-      password: derivePassword(phone),
-    });
+    const rows = await adminSql<{
+      name: string | null;
+      preferred_language: string;
+      tour_completed: boolean;
+      active: boolean;
+    }>(
+      `SELECT name, preferred_language, tour_completed, active
+       FROM public.users WHERE id = $1`,
+      [userId]
+    );
+    if (!rows[0]?.active) {
+      return Response.json({ error: "This account is disabled." }, { status: 403 });
+    }
+
+    // The verified OTP is the credential: open the session directly.
+    const pair = await createSessionTokens(userId, await getRequestMeta());
+    await setAuthCookies(pair);
+
+    const user: SessionUser = {
+      id: userId,
+      email: null,
+      name: rows[0].name,
+      avatarUrl: null,
+      phone,
+      providers: ["phone"],
+      emailVerified: false,
+      contactVerified: true,
+      preferredLanguage: rows[0].preferred_language,
+      tourCompleted: rows[0].tour_completed,
+      active: true,
+    };
+    return Response.json({ user });
   } catch (error) {
     console.error("verify-otp failed:", error);
     return Response.json(

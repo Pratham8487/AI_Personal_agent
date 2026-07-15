@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { customArray } from "country-codes-list";
+import { apiFetch } from "@/lib/auth-client";
 import Card from "./card";
 import WhatsappToolRunner, { type WaMcpTool } from "./whatsapp-tool-runner";
 
@@ -67,7 +68,7 @@ export default function WhatsappSettings({
 
   const loadStatus = useCallback(
     (): Promise<WhatsappStatus | null> =>
-      fetch(`/api/integrations/whatsapp/status?uid=${userId}`)
+      apiFetch("/api/integrations/whatsapp/status")
         .then(async (res) => {
           const body = (await res
             .json()
@@ -98,7 +99,7 @@ export default function WhatsappSettings({
       }
       autoReconnectTried.current = true;
       setAutoConnecting(true);
-      fetch("/api/integrations/whatsapp/reconnect", {
+      apiFetch("/api/integrations/whatsapp/reconnect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId }),
@@ -111,7 +112,7 @@ export default function WhatsappSettings({
 
   useEffect(() => {
     let active = true;
-    fetch(`/api/integrations/whatsapp/mcp?uid=${userId}`, {
+    apiFetch(`/api/integrations/whatsapp/mcp?uid=${userId}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
@@ -140,7 +141,7 @@ export default function WhatsappSettings({
     setBusy(action);
     setActionError(null);
     try {
-      const res = await fetch(`/api/integrations/whatsapp/${action}`, {
+      const res = await apiFetch(`/api/integrations/whatsapp/${action}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId }),

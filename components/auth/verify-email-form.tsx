@@ -1,56 +1,60 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { insforge } from "@/lib/insforge";
-import { syncUserToDatabase } from "@/lib/auth";
-import TextField from "./text-field";
-import SubmitButton from "./submit-button";
+import { resendVerification, verifyEmail } from "@/lib/auth-client";
 import FormError from "./form-error";
+import SubmitButton from "./submit-button";
+import TextField from "./text-field";
 
-export default function VerifyEmailForm({ email }: { email: string }) {
+const RESEND_COOLDOWN_SECONDS = 60;
+
+export default function VerifyEmailForm({
+  email,
+  onDone,
+}: {
+  email: string;
+  onDone?: () => void;
+}) {
   const router = useRouter();
   const [otp, setOtp] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [cooldown, setCooldown] = useState(RESEND_COOLDOWN_SECONDS);
+
+  // The server is silent about resend rate limits (anti-enumeration), so the
+  // client enforces the 60s window itself.
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = setInterval(() => setCooldown((s) => s - 1), 1000);
+    return () => clearInterval(timer);
+  }, [cooldown]);
+
+  function finish() {
+    if (onDone) onDone();
+    else router.replace("/");
+  }
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     setPending(true);
     setError(null);
-    setNotice(null);
-
-    const { data, error: verifyError } = await insforge.auth.verifyEmail({
-      email,
-      otp: otp.trim(),
-    });
-
-    if (verifyError || !data) {
-      setError(verifyError?.message ?? "Verification failed. Please try again.");
+    const { user, error: verifyError } = await verifyEmail({ email, otp });
+    if (!user) {
+      setError(verifyError ?? "Verification failed. Please try again.");
       setPending(false);
       return;
     }
-
-    const { data: current } = await insforge.auth.getCurrentUser();
-    if (current?.user) {
-      const { error: syncError } = await syncUserToDatabase(current.user);
-      if (syncError) console.error("Failed to sync user record:", syncError);
-    }
-    router.replace("/");
+    finish();
   }
 
   async function handleResend() {
+    if (cooldown > 0) return;
     setError(null);
-    setNotice(null);
-    const { error: resendError } = await insforge.auth.resendVerificationEmail({
-      email,
-    });
-    if (resendError) {
-      setError(resendError.message);
-    } else {
-      setNotice("A new code is on its way to your inbox.");
-    }
+    await resendVerification(email);
+    setNotice("If that address is registered, we sent a new code.");
+    setCooldown(RESEND_COOLDOWN_SECONDS);
   }
 
   return (
@@ -76,9 +80,19 @@ export default function VerifyEmailForm({ email }: { email: string }) {
       <button
         type="button"
         onClick={handleResend}
-        className="text-sm font-medium text-zinc-400 transition-colors hover:text-white"
+        disabled={pending || cooldown > 0}
+        className="text-sm font-medium text-zinc-400 transition-colors hover:text-white disabled:opacity-60"
       >
-        Didn&apos;t get the code? Resend it
+        {cooldown > 0
+          ? `Resend code in ${cooldown}s`
+          : "Didn't get the email? Resend code"}
+      </button>
+      <button
+        type="button"
+        onClick={finish}
+        className="text-sm font-medium text-zinc-500 transition-colors hover:text-zinc-300"
+      >
+        Skip for now →
       </button>
     </form>
   );

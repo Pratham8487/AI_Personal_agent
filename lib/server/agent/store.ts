@@ -1,4 +1,4 @@
-import { adminSql } from "@/lib/server/phone-auth";
+import { adminSql } from "@/lib/server/db";
 import { ensureAgentTables } from "./schema";
 
 /** Chat history stays valid for one day; older conversations are pruned. */
@@ -124,7 +124,7 @@ export async function saveMessage(
 /** Deletes the user's conversations (and messages) past the validity window. */
 export async function pruneExpired(userId: string): Promise<void> {
   await ensureAgentTables();
-  // InsForge rawsql wants one statement per call.
+  // Parameterized queries allow one statement per call.
   await adminSql(
     `DELETE FROM agent_messages WHERE user_id = $1 AND conversation_id IN (
        SELECT id FROM agent_conversations

@@ -1,5 +1,5 @@
-import { isUuid } from "@/lib/server/gmail-oauth";
 import { InvalidToolArgsError, UnknownToolError } from "@/lib/server/gmail-mcp";
+import { getSessionUser } from "@/lib/server/session";
 import { WhatsAppNotConnectedError } from "@/lib/server/whatsapp-manager";
 import {
   WHATSAPP_MCP_TOOLS,
@@ -7,10 +7,10 @@ import {
 } from "@/lib/server/whatsapp-mcp";
 
 /**
- * MCP server (Streamable HTTP, stateless) exposing the user's WhatsApp
- * connection. Point any MCP client at:
+ * MCP server (Streamable HTTP, stateless) exposing the signed-in user's
+ * WhatsApp connection. Authenticated by the session cookie:
  *
- *   POST /api/integrations/whatsapp/mcp?uid=<user-uuid>
+ *   POST /api/integrations/whatsapp/mcp
  */
 
 const SUPPORTED_PROTOCOL_VERSIONS = ["2025-06-18", "2025-03-26", "2024-11-05"];
@@ -108,12 +108,13 @@ async function handleMessage(uid: string, message: JsonRpcMessage) {
 }
 
 export async function POST(request: Request) {
-  const uid = new URL(request.url).searchParams.get("uid") ?? "";
-  if (!isUuid(uid)) {
-    return Response.json(rpcError(null, -32000, "Invalid or missing uid."), {
-      status: 400,
+  const user = await getSessionUser();
+  if (!user) {
+    return Response.json(rpcError(null, -32000, "Not signed in."), {
+      status: 401,
     });
   }
+  const uid = user.id;
 
   let body: unknown;
   try {

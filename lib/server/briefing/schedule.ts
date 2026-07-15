@@ -1,5 +1,5 @@
 import type { BriefingFrequency } from "@/lib/briefing-types";
-import { adminSql } from "@/lib/server/phone-auth";
+import { adminSql } from "@/lib/server/db";
 import { ensureBriefingTables } from "./schema";
 
 /**

@@ -7,19 +7,22 @@ import {
   RefreshLimitError,
 } from "@/lib/server/briefing/service";
 import { isUuid } from "@/lib/server/gmail-oauth";
+import { getSessionUser, unauthorized } from "@/lib/server/session";
 
-/** Manual "Generate now" for one briefing. Body: { userId, briefingId }. */
+/** Manual "Generate now" for one briefing. Body: { briefingId }. */
 export async function POST(request: Request) {
-  let body: { userId?: string; briefingId?: string };
+  const user = await getSessionUser();
+  if (!user) return unauthorized();
+
+  let body: { briefingId?: string };
   try {
     body = await request.json();
   } catch {
     return Response.json({ error: "Invalid request body." }, { status: 400 });
   }
 
-  const userId = body.userId ?? "";
   const briefingId = body.briefingId ?? "";
-  if (!isUuid(userId) || !isUuid(briefingId)) {
+  if (!isUuid(briefingId)) {
     return Response.json({ error: "Invalid id." }, { status: 400 });
   }
   if (!aiConfigured()) {
@@ -30,8 +33,8 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await generateNow(userId, briefingId);
-    return Response.json({ result, refresh: await getBriefingQuota(userId) });
+    const result = await generateNow(user.id, briefingId);
+    return Response.json({ result, refresh: await getBriefingQuota(user.id) });
   } catch (error) {
     if (error instanceof RefreshLimitError) {
       const { quota } = error;

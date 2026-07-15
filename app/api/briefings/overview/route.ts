@@ -1,22 +1,13 @@
 import { getOverview } from "@/lib/server/briefing/service";
-import { isUuid } from "@/lib/server/gmail-oauth";
+import { getSessionUser, unauthorized } from "@/lib/server/session";
 
-/** Everything the Briefing hub needs in one call. Body: { userId }. */
-export async function POST(request: Request) {
-  let body: { userId?: string };
-  try {
-    body = await request.json();
-  } catch {
-    return Response.json({ error: "Invalid request body." }, { status: 400 });
-  }
-
-  const userId = body.userId ?? "";
-  if (!isUuid(userId)) {
-    return Response.json({ error: "Invalid user id." }, { status: 400 });
-  }
+/** Everything the Briefing hub needs in one call. */
+export async function POST() {
+  const user = await getSessionUser();
+  if (!user) return unauthorized();
 
   try {
-    return Response.json(await getOverview(userId));
+    return Response.json(await getOverview(user.id));
   } catch (error) {
     console.error("Briefings: overview failed:", error);
     return Response.json(

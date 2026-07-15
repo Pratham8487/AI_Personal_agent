@@ -3,25 +3,24 @@ import {
   listResultSummaries,
 } from "@/lib/server/briefing/store";
 import { isUuid } from "@/lib/server/gmail-oauth";
+import { getSessionUser, unauthorized } from "@/lib/server/session";
 
 /**
- * GET ?userId=&id=            → { result }  (one generated briefing, full data)
- * GET ?userId=&briefingId?=&limit?=&before?= → { results } (history summaries)
+ * GET ?id=            → { result }  (one generated briefing, full data)
+ * GET ?briefingId?=&limit?=&before?= → { results } (history summaries)
  */
 export async function GET(request: Request) {
-  const url = new URL(request.url);
-  const userId = url.searchParams.get("userId") ?? "";
-  if (!isUuid(userId)) {
-    return Response.json({ error: "Invalid user id." }, { status: 400 });
-  }
+  const user = await getSessionUser();
+  if (!user) return unauthorized();
 
+  const url = new URL(request.url);
   const id = url.searchParams.get("id");
   try {
     if (id) {
       if (!isUuid(id)) {
         return Response.json({ error: "Invalid briefing id." }, { status: 400 });
       }
-      const result = await getResult(userId, id);
+      const result = await getResult(user.id, id);
       if (!result) {
         return Response.json({ error: "Briefing not found." }, { status: 404 });
       }
@@ -40,7 +39,7 @@ export async function GET(request: Request) {
     if (before && Number.isNaN(Date.parse(before))) {
       return Response.json({ error: "Invalid cursor." }, { status: 400 });
     }
-    const results = await listResultSummaries(userId, { briefingId, limit, before });
+    const results = await listResultSummaries(user.id, { briefingId, limit, before });
     return Response.json({ results });
   } catch (error) {
     console.error("Briefings: results failed:", error);

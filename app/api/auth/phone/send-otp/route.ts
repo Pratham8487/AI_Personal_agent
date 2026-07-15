@@ -2,11 +2,10 @@ import {
   generateOtp,
   invalidateOtps,
   isRateLimited,
-  normalizePhone,
   OTP_RESEND_SECONDS,
-  sendOtpSms,
   storeOtp,
-} from "@/lib/server/phone-auth";
+} from "@/lib/server/otp";
+import { normalizePhone, sendOtpSms } from "@/lib/server/phone-auth";
 
 export async function POST(request: Request) {
   let body: { phone?: string };
@@ -25,7 +24,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    if (await isRateLimited(phone)) {
+    if (await isRateLimited("PHONE_VERIFICATION", phone)) {
       return Response.json(
         { error: `Please wait ${OTP_RESEND_SECONDS} seconds before requesting a new code.` },
         { status: 429 }
@@ -33,12 +32,12 @@ export async function POST(request: Request) {
     }
 
     const otp = generateOtp();
-    await storeOtp(phone, otp);
+    await storeOtp("PHONE_VERIFICATION", phone, otp);
     try {
       await sendOtpSms(phone, otp);
     } catch (smsError) {
       // No SMS went out, so don't leave a row behind that rate-limits the retry.
-      await invalidateOtps(phone);
+      await invalidateOtps("PHONE_VERIFICATION", phone);
       throw smsError;
     }
 

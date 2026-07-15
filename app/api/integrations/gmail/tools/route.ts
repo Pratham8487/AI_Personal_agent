@@ -2,18 +2,16 @@ import { GMAIL_TOOLS, getProfile } from "@/lib/server/gmail-api";
 import {
   GmailNotConfiguredError,
   GmailNotConnectedError,
-  isUuid,
 } from "@/lib/server/gmail-oauth";
+import { getSessionUser, unauthorized } from "@/lib/server/session";
 
 /** Lists the Gmail actions available, verifying the connection is live. */
-export async function GET(request: Request) {
-  const uid = new URL(request.url).searchParams.get("uid") ?? "";
-  if (!isUuid(uid)) {
-    return Response.json({ error: "Invalid user id." }, { status: 400 });
-  }
+export async function GET() {
+  const user = await getSessionUser();
+  if (!user) return unauthorized();
 
   try {
-    const profile = await getProfile(uid);
+    const profile = await getProfile(user.id);
     return Response.json({ tools: GMAIL_TOOLS, email: profile.emailAddress });
   } catch (error) {
     if (error instanceof GmailNotConfiguredError) {

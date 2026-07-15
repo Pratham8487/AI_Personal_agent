@@ -3,8 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { insforge } from "@/lib/insforge";
-import { signInWithGoogle, syncUserToDatabase } from "@/lib/auth";
+import { isValidEmail, signIn, signInWithGoogle } from "@/lib/auth-client";
 import AuthCard from "./auth-card";
 import AuthDivider from "./auth-divider";
 import FormError from "./form-error";
@@ -13,60 +12,55 @@ import PhoneAuthForm from "./phone-auth-form";
 import PhoneButton from "./phone-button";
 import SubmitButton from "./submit-button";
 import TextField from "./text-field";
-import VerifyEmailForm from "./verify-email-form";
+
+/** Friendly message for ?error= codes set by the Google callback redirect. */
+function googleCallbackError(): string | null {
+  if (typeof window === "undefined") return null;
+  const code = new URLSearchParams(window.location.search).get("error");
+  if (!code) return null;
+  if (code === "google_denied") return "Google sign-in was cancelled.";
+  if (code === "account_disabled") return "This account is disabled.";
+  return "Google sign-in failed. Please try again.";
+}
 
 export default function SignInForm() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [needsVerification, setNeedsVerification] = useState(false);
+  const [error, setError] = useState<string | null>(googleCallbackError);
   const [phoneMode, setPhoneMode] = useState(false);
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    setPending(true);
     setError(null);
 
-    const { data, error: signInError } = await insforge.auth.signInWithPassword(
-      { email, password }
-    );
-
-    if (signInError || !data) {
-      if (/verif/i.test(`${signInError?.error} ${signInError?.message}`)) {
-        setNeedsVerification(true);
-      } else {
-        setError(signInError?.message ?? "Unable to sign in. Please try again.");
-      }
-      setPending(false);
+    if (!isValidEmail(email)) {
+      setError("Enter a valid email address, e.g. you@example.com.");
+      return;
+    }
+    if (!password) {
+      setError("Enter your password.");
       return;
     }
 
-    const { error: syncError } = await syncUserToDatabase(data.user);
-    if (syncError) console.error("Failed to sync user record:", syncError);
+    setPending(true);
+    const { user, error: signInError } = await signIn({ email, password });
+    if (!user) {
+      setError(signInError ?? "Unable to sign in. Please try again.");
+      setPending(false);
+      return;
+    }
     router.replace("/");
   }
 
-  async function handleGoogle() {
+  function handleGoogle() {
     setError(null);
-    const oauthError = await signInWithGoogle();
-    if (oauthError) setError(oauthError.message);
+    signInWithGoogle(); // full-page redirect
   }
 
   if (phoneMode) {
     return <PhoneAuthForm onBack={() => setPhoneMode(false)} />;
-  }
-
-  if (needsVerification) {
-    return (
-      <AuthCard
-        title="Verify your email"
-        subtitle={`Your email isn't verified yet. Enter the 6-digit code sent to ${email}.`}
-      >
-        <VerifyEmailForm email={email} />
-      </AuthCard>
-    );
   }
 
   return (
@@ -112,6 +106,14 @@ export default function SignInForm() {
           value={password}
           onChange={(event) => setPassword(event.target.value)}
         />
+        <div className="-mt-2 text-right">
+          <Link
+            href="/forgot-password"
+            className="text-sm font-medium text-zinc-400 transition-colors hover:text-white"
+          >
+            Forgot password?
+          </Link>
+        </div>
         <SubmitButton pending={pending}>Sign in</SubmitButton>
       </form>
     </AuthCard>

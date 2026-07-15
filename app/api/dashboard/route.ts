@@ -4,26 +4,25 @@ import {
   NoProviderDataError,
   RefreshLimitError,
 } from "@/lib/server/dashboard/service";
-import { isUuid } from "@/lib/server/gmail-oauth";
+import { getSessionUser, unauthorized } from "@/lib/server/session";
 
 const GENERIC_ERROR = "Could not load your dashboard. Please retry.";
 
 /**
- * Aggregated dashboard for every connected provider. Body: { userId, force? }.
+ * Aggregated dashboard for every connected provider. Body: { force? }.
  * force bypasses the 2-hour server cache (the Refresh button).
  */
 export async function POST(request: Request) {
-  let body: { userId?: string; force?: boolean };
+  const user = await getSessionUser();
+  if (!user) return unauthorized();
+
+  let body: { force?: boolean };
   try {
     body = await request.json();
   } catch {
     return Response.json({ error: "Invalid request body." }, { status: 400 });
   }
 
-  const userId = body.userId ?? "";
-  if (!isUuid(userId)) {
-    return Response.json({ error: "Invalid user id." }, { status: 400 });
-  }
   if (!aiConfigured()) {
     return Response.json(
       { error: new AiNotConfiguredError().message, code: "not_configured" },
@@ -32,7 +31,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const data = await buildDashboard(userId, body.force === true);
+    const data = await buildDashboard(user.id, body.force === true);
     return Response.json(data);
   } catch (error) {
     if (error instanceof RefreshLimitError) {

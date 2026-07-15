@@ -4,6 +4,7 @@ import {
   reconcileDefaultBriefings,
   staleQueuedRuns,
 } from "@/lib/server/briefing/schedule";
+import { cleanupExpiredData } from "@/lib/server/retention";
 
 /**
  * Internal endpoint for the Trigger.dev 15-minute cron: reconciles the
@@ -24,6 +25,11 @@ export async function POST(request: Request) {
   const windowMinutes = Math.min(
     60,
     Math.max(1, Math.trunc(body.windowMinutes ?? 15) || 15),
+  );
+
+  // Fire-and-forget: retention must never delay or fail the claim.
+  void cleanupExpiredData().catch((error) =>
+    console.error("Retention cleanup failed:", error),
   );
 
   try {

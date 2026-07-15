@@ -1,24 +1,16 @@
-import { isUuid } from "@/lib/server/gmail-oauth";
+import { getSessionUser, unauthorized } from "@/lib/server/session";
 import {
   WhatsAppNotConnectedError,
   ensureConnected,
 } from "@/lib/server/whatsapp-manager";
 
 /** Reopens the socket from stored creds (e.g. after a server restart). */
-export async function POST(request: Request) {
-  let body: { userId?: string };
-  try {
-    body = await request.json();
-  } catch {
-    return Response.json({ error: "Invalid request body." }, { status: 400 });
-  }
-  const userId = body.userId ?? "";
-  if (!isUuid(userId)) {
-    return Response.json({ error: "Invalid user id." }, { status: 400 });
-  }
+export async function POST() {
+  const user = await getSessionUser();
+  if (!user) return unauthorized();
 
   try {
-    await ensureConnected(userId);
+    await ensureConnected(user.id);
     return Response.json({ connection: "open" });
   } catch (error) {
     if (error instanceof WhatsAppNotConnectedError) {

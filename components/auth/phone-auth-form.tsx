@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { insforge } from "@/lib/insforge";
 import AuthCard from "./auth-card";
 import FormError from "./form-error";
 import SubmitButton from "./submit-button";
@@ -60,13 +59,12 @@ export default function PhoneAuthForm({
     setNotice(null);
     setPending(true);
     try {
-      const credentials = await postJson("/api/auth/phone/verify-otp", {
+      // A successful verify-otp response already set the session cookie.
+      await postJson("/api/auth/phone/verify-otp", {
         phone,
         otp,
         name: collectName ? name : undefined,
       });
-      const { error: signInError } = await insforge.auth.signInWithPassword(credentials);
-      if (signInError) throw new Error(signInError.message);
       router.replace("/");
       return;
     } catch (err) {

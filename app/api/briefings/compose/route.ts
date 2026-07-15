@@ -2,13 +2,17 @@ import { AiNotConfiguredError, aiConfigured } from "@/lib/server/brief-ai";
 import { composeDraft, type ComposeChannel } from "@/lib/server/briefing/ai";
 import { getResult } from "@/lib/server/briefing/store";
 import { isUuid } from "@/lib/server/gmail-oauth";
+import { getSessionUser, unauthorized } from "@/lib/server/session";
 
 /**
  * Drafts an email/message from a briefing item's context.
- * Body: { userId, channel, item: { title, description, source, timestamp? },
+ * Body: { channel, item: { title, description, source, timestamp? },
  *         resultId?, instruction? }.
  */
 export async function POST(request: Request) {
+  const user = await getSessionUser();
+  if (!user) return unauthorized();
+
   let body: Record<string, unknown>;
   try {
     body = await request.json();
@@ -16,10 +20,6 @@ export async function POST(request: Request) {
     return Response.json({ error: "Invalid request body." }, { status: 400 });
   }
 
-  const userId = typeof body.userId === "string" ? body.userId : "";
-  if (!isUuid(userId)) {
-    return Response.json({ error: "Invalid user id." }, { status: 400 });
-  }
   const channel = body.channel;
   if (channel !== "gmail" && channel !== "whatsapp") {
     return Response.json({ error: "Invalid channel." }, { status: 400 });
@@ -53,7 +53,7 @@ export async function POST(request: Request) {
     let briefingSummary: string | undefined;
     const resultId = body.resultId;
     if (typeof resultId === "string" && isUuid(resultId)) {
-      const result = await getResult(userId, resultId);
+      const result = await getResult(user.id, resultId);
       briefingSummary = result?.topSummary;
     }
     const draft = await composeDraft(channel as ComposeChannel, {

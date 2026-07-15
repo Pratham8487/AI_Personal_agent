@@ -1,22 +1,14 @@
 import { createConversation, pruneExpired } from "@/lib/server/agent/store";
-import { isUuid } from "@/lib/server/gmail-oauth";
+import { getSessionUser, unauthorized } from "@/lib/server/session";
 
-/** POST { userId } → starts a fresh conversation, returns its id. */
-export async function POST(request: Request) {
-  let body: { userId?: string };
-  try {
-    body = await request.json();
-  } catch {
-    return Response.json({ error: "Invalid JSON body." }, { status: 400 });
-  }
-  const userId = body.userId ?? "";
-  if (!isUuid(userId)) {
-    return Response.json({ error: "Invalid user id." }, { status: 400 });
-  }
+/** POST → starts a fresh conversation, returns its id. */
+export async function POST() {
+  const user = await getSessionUser();
+  if (!user) return unauthorized();
 
   try {
-    await pruneExpired(userId);
-    const conversationId = await createConversation(userId);
+    await pruneExpired(user.id);
+    const conversationId = await createConversation(user.id);
     return Response.json({ conversationId });
   } catch (error) {
     console.error("Agent new conversation failed:", error);

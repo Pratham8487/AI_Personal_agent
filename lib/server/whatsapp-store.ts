@@ -1,11 +1,12 @@
-import { adminSql } from "./phone-auth";
+import { adminSql } from "./db";
 import { InvalidToolArgsError } from "./gmail-mcp";
-import type { Chat, Contact, WAMessage, WASocket } from "baileys";
+import type { Chat, WAMessage, WASocket } from "baileys";
 
 /**
- * Baileys no longer ships a message store, so chats/contacts/messages are
- * persisted from socket events into whatsapp_* tables; the read-side MCP
- * tools query those tables instead of the live socket.
+ * Baileys no longer ships a message store, so chats/messages are persisted
+ * from socket events into whatsapp_* tables; the read-side MCP tools query
+ * those tables instead of the live socket. Contact names are derived from
+ * chat names and message sender names — no separate contacts table.
  */
 
 export type StoredMessage = {
@@ -229,42 +230,6 @@ async function upsertChats(
   );
 }
 
-async function upsertContacts(
-  userId: string,
-  contacts: Array<Partial<Contact>>,
-): Promise<void> {
-  // A contact can be addressed by lid AND phone-number JID; store a row
-  // for each form so sender lookups hit from either.
-  const rows = contacts.flatMap((contact) => {
-    const jids = [contact.id, contact.lid, contact.phoneNumber]
-      .map(storableJid)
-      .filter((jid): jid is string => !!jid);
-    return [...new Set(jids)].map((jid) => ({
-      jid,
-      name: contact.name ?? null,
-      notify: contact.notify ?? null,
-    }));
-  });
-  if (rows.length === 0) return;
-  const values: string[] = [];
-  const params: unknown[] = [userId];
-  for (const row of rows) {
-    params.push(row.jid, row.name, row.notify);
-    values.push(
-      `($1, $${params.length - 2}, $${params.length - 1}, $${params.length})`,
-    );
-  }
-  await adminSql(
-    `INSERT INTO public.whatsapp_contacts (user_id, jid, name, notify)
-     VALUES ${values.join(", ")}
-     ON CONFLICT (user_id, jid) DO UPDATE SET
-       name = COALESCE(EXCLUDED.name, public.whatsapp_contacts.name),
-       notify = COALESCE(EXCLUDED.notify, public.whatsapp_contacts.notify),
-       updated_at = now()`,
-    params,
-  );
-}
-
 function logStoreError(scope: string) {
   return (error: unknown) =>
     console.error(`WhatsApp store ingest failed (${scope}):`, error);
@@ -272,10 +237,9 @@ function logStoreError(scope: string) {
 
 /** Persists history sync + live events for one user's socket. */
 export function bindStoreEvents(userId: string, sock: WASocket): void {
-  sock.ev.on("messaging-history.set", ({ chats, contacts, messages }) => {
+  sock.ev.on("messaging-history.set", ({ chats, messages }) => {
     void (async () => {
       await upsertChats(userId, chats ?? []);
-      await upsertContacts(userId, contacts ?? []);
       const rows = (messages ?? [])
         .map(mapMessage)
         .filter((row): row is MessageRow => row !== null);
@@ -297,12 +261,6 @@ export function bindStoreEvents(userId: string, sock: WASocket): void {
   });
   sock.ev.on("chats.update", (updates) => {
     void upsertChats(userId, updates).catch(logStoreError("chats"));
-  });
-  sock.ev.on("contacts.upsert", (contacts) => {
-    void upsertContacts(userId, contacts).catch(logStoreError("contacts"));
-  });
-  sock.ev.on("contacts.update", (updates) => {
-    void upsertContacts(userId, updates).catch(logStoreError("contacts"));
   });
 }
 
@@ -329,18 +287,14 @@ export async function recordSentMessage(
 
 const MESSAGE_SELECT = `
   SELECT m.chat_jid,
-         COALESCE(c.name, ct.name, ct.notify) AS chat_name,
+         c.name AS chat_name,
          m.sender_jid,
-         COALESCE(m.sender_name, sct.name, sct.notify) AS sender_name,
+         m.sender_name,
          m.from_me, m.text, m.msg_type,
          to_char(m.sent_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS sent_at
   FROM public.whatsapp_messages m
   LEFT JOIN public.whatsapp_chats c
-    ON c.user_id = m.user_id AND c.jid = m.chat_jid
-  LEFT JOIN public.whatsapp_contacts ct
-    ON ct.user_id = m.user_id AND ct.jid = m.chat_jid
-  LEFT JOIN public.whatsapp_contacts sct
-    ON sct.user_id = m.user_id AND sct.jid = m.sender_jid`;
+    ON c.user_id = m.user_id AND c.jid = m.chat_jid`;
 
 /**
  * History-sync messages often lack a push name while live messages from
@@ -422,27 +376,31 @@ export async function searchChats(
   count: number,
   options: { groupsOnly?: boolean } = {},
 ): Promise<ChatSummary[]> {
-  const groupFilter = options.groupsOnly ? "WHERE t.is_group" : "";
+  const chatsBranch = `
+    SELECT jid, name, is_group,
+           to_char(last_message_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS last_message_at
+    FROM public.whatsapp_chats
+    WHERE user_id = $1 ${options.groupsOnly ? "AND is_group" : ""} AND name ILIKE $2`;
+  // Individual chats rarely carry a name; match people by the push name on
+  // their direct messages (peer messages have sender_jid = chat_jid).
+  const sendersBranch = `
+    UNION
+    SELECT jid, name, false AS is_group, last_message_at FROM (
+      SELECT DISTINCT ON (m.chat_jid) m.chat_jid AS jid, m.sender_name AS name,
+             to_char(m.sent_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS last_message_at
+      FROM public.whatsapp_messages m
+      WHERE m.user_id = $1 AND m.chat_jid = m.sender_jid AND m.sender_name ILIKE $2
+        AND NOT EXISTS (
+          SELECT 1 FROM public.whatsapp_chats c
+          WHERE c.user_id = $1 AND c.jid = m.chat_jid AND c.name IS NOT NULL
+        )
+      ORDER BY m.chat_jid, m.sent_at DESC
+    ) s`;
   return adminSql<ChatSummary>(
-    `SELECT t.jid, t.name, t.is_group, t.last_message_at FROM (
-       SELECT c.jid,
-              COALESCE(c.name, ct.name, ct.notify) AS name,
-              c.is_group,
-              to_char(c.last_message_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS last_message_at
-       FROM public.whatsapp_chats c
-       LEFT JOIN public.whatsapp_contacts ct
-         ON ct.user_id = c.user_id AND ct.jid = c.jid
-       WHERE c.user_id = $1
-       UNION
-       SELECT ct.jid, COALESCE(ct.name, ct.notify) AS name, false, NULL
-       FROM public.whatsapp_contacts ct
-       WHERE ct.user_id = $1
-         AND NOT EXISTS (
-           SELECT 1 FROM public.whatsapp_chats c2
-           WHERE c2.user_id = $1 AND c2.jid = ct.jid
-         )
-     ) t ${groupFilter ? `${groupFilter} AND` : "WHERE"} t.name ILIKE $2
-     ORDER BY t.last_message_at DESC NULLS LAST, t.name
+    `SELECT jid, name, is_group, last_message_at FROM (
+       ${chatsBranch}${options.groupsOnly ? "" : sendersBranch}
+     ) t
+     ORDER BY last_message_at DESC NULLS LAST, name
      LIMIT $3`,
     [userId, likePattern(query), count],
   );
@@ -455,18 +413,15 @@ export async function getFrequentChats(
 ): Promise<ChatSummary[]> {
   return adminSql<ChatSummary>(
     `SELECT m.chat_jid AS jid,
-            COALESCE(c.name, ct.name, ct.notify) AS name,
+            c.name,
             false AS is_group,
             to_char(max(m.sent_at) AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS last_message_at
      FROM public.whatsapp_messages m
      LEFT JOIN public.whatsapp_chats c
        ON c.user_id = m.user_id AND c.jid = m.chat_jid
-     LEFT JOIN public.whatsapp_contacts ct
-       ON ct.user_id = m.user_id AND ct.jid = m.chat_jid
      WHERE m.user_id = $1 AND m.chat_jid NOT LIKE '%@g.us'
-       AND (m.chat_jid NOT LIKE '%@lid'
-            OR COALESCE(c.name, ct.name, ct.notify) IS NOT NULL)
-     GROUP BY m.chat_jid, c.name, ct.name, ct.notify
+       AND (m.chat_jid NOT LIKE '%@lid' OR c.name IS NOT NULL)
+     GROUP BY m.chat_jid, c.name
      ORDER BY count(*) DESC
      LIMIT $2`,
     [userId, count],
@@ -484,27 +439,51 @@ export async function listGroupsDb(userId: string): Promise<ChatSummary[]> {
   );
 }
 
+/** Contact info is derived from chats + message sender names (no contacts table). */
+async function contactByJid(
+  userId: string,
+  jid: string,
+): Promise<ContactSummary[]> {
+  return adminSql<ContactSummary>(
+    `SELECT jid, name, NULL AS notify FROM (
+       SELECT $2::text AS jid,
+              COALESCE(
+                (SELECT c.name FROM public.whatsapp_chats c
+                 WHERE c.user_id = $1 AND c.jid = $2),
+                (SELECT m.sender_name FROM public.whatsapp_messages m
+                 WHERE m.user_id = $1 AND m.sender_jid = $2 AND m.sender_name IS NOT NULL
+                 ORDER BY m.sent_at DESC LIMIT 1)
+              ) AS name,
+              EXISTS (SELECT 1 FROM public.whatsapp_chats c
+                      WHERE c.user_id = $1 AND c.jid = $2)
+              OR EXISTS (SELECT 1 FROM public.whatsapp_messages m
+                         WHERE m.user_id = $1 AND (m.chat_jid = $2 OR m.sender_jid = $2)) AS known
+     ) t WHERE t.known`,
+    [userId, jid],
+  );
+}
+
 export async function getContact(
   userId: string,
   input: string,
 ): Promise<ContactSummary[]> {
   const trimmed = input.trim();
   if (trimmed.includes("@")) {
-    return adminSql<ContactSummary>(
-      "SELECT jid, name, notify FROM public.whatsapp_contacts WHERE user_id = $1 AND jid = $2",
-      [userId, trimmed.replace(/:\d+@/, "@")],
-    );
+    return contactByJid(userId, trimmed.replace(/:\d+@/, "@"));
   }
   const digits = trimmed.replace(/[\s().+-]/g, "");
   if (/^\d{6,15}$/.test(digits)) {
-    return adminSql<ContactSummary>(
-      "SELECT jid, name, notify FROM public.whatsapp_contacts WHERE user_id = $1 AND jid = $2",
-      [userId, `${digits}@s.whatsapp.net`],
-    );
+    return contactByJid(userId, `${digits}@s.whatsapp.net`);
   }
   return adminSql<ContactSummary>(
-    `SELECT jid, name, notify FROM public.whatsapp_contacts
-     WHERE user_id = $1 AND (name ILIKE $2 OR notify ILIKE $2)
+    `SELECT jid, name, NULL AS notify FROM (
+       SELECT jid, name FROM public.whatsapp_chats
+       WHERE user_id = $1 AND NOT is_group AND name ILIKE $2
+       UNION
+       SELECT DISTINCT ON (sender_jid) sender_jid AS jid, sender_name AS name
+       FROM public.whatsapp_messages
+       WHERE user_id = $1 AND sender_name ILIKE $2 AND sender_jid IS NOT NULL
+     ) t
      ORDER BY name NULLS LAST
      LIMIT 10`,
     [userId, likePattern(trimmed)],
@@ -569,8 +548,7 @@ export async function resolveChatJid(
 export async function purgeUserData(userId: string): Promise<void> {
   await adminSql(
     `WITH m AS (DELETE FROM public.whatsapp_messages WHERE user_id = $1),
-          c AS (DELETE FROM public.whatsapp_chats WHERE user_id = $1),
-          ct AS (DELETE FROM public.whatsapp_contacts WHERE user_id = $1)
+          c AS (DELETE FROM public.whatsapp_chats WHERE user_id = $1)
      DELETE FROM public.whatsapp_sessions WHERE user_id = $1`,
     [userId],
   );

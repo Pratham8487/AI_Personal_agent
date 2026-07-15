@@ -4,10 +4,13 @@ import {
 } from "@/lib/server/briefing/schedule";
 import { BriefingCapError, createDefinition } from "@/lib/server/briefing/store";
 import { parseDefinitionInput } from "@/lib/server/briefing/validate";
-import { isUuid } from "@/lib/server/gmail-oauth";
+import { getSessionUser, unauthorized } from "@/lib/server/session";
 
-/** Creates a custom briefing. Body: { userId, ...BriefingDefinitionInput }. */
+/** Creates a custom briefing. Body: { ...BriefingDefinitionInput }. */
 export async function POST(request: Request) {
+  const user = await getSessionUser();
+  if (!user) return unauthorized();
+
   let body: Record<string, unknown>;
   try {
     body = await request.json();
@@ -15,10 +18,6 @@ export async function POST(request: Request) {
     return Response.json({ error: "Invalid request body." }, { status: 400 });
   }
 
-  const userId = typeof body.userId === "string" ? body.userId : "";
-  if (!isUuid(userId)) {
-    return Response.json({ error: "Invalid user id." }, { status: 400 });
-  }
   const parsed = parseDefinitionInput(body);
   if ("error" in parsed) {
     return Response.json({ error: parsed.error }, { status: 400 });
@@ -27,7 +26,7 @@ export async function POST(request: Request) {
   try {
     const { nextRunAt, timezone } = await computeNextRun(parsed.input);
     const briefing = await createDefinition(
-      userId,
+      user.id,
       { ...parsed.input, timezone },
       nextRunAt,
     );

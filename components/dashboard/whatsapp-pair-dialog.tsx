@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { customArray } from "country-codes-list";
 import QRCode from "qrcode";
+import { apiFetch } from "@/lib/auth-client";
 import Modal from "./modal";
 
 /** Same shape normalizePhone accepts server-side. */
@@ -160,7 +161,7 @@ export default function WhatsappPairDialog({
     setPhase("requesting");
     setError(null);
     try {
-      const res = await fetch("/api/integrations/whatsapp/pair", {
+      const res = await apiFetch("/api/integrations/whatsapp/pair", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId, phone: normalized }),
@@ -189,7 +190,7 @@ export default function WhatsappPairDialog({
     setPhase("requesting-qr");
     setError(null);
     try {
-      const res = await fetch("/api/integrations/whatsapp/pair", {
+      const res = await apiFetch("/api/integrations/whatsapp/pair", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId, mode: "qr" }),
@@ -242,7 +243,7 @@ export default function WhatsappPairDialog({
         );
         return;
       }
-      fetch(`/api/integrations/whatsapp/status?uid=${userId}`)
+      apiFetch("/api/integrations/whatsapp/status")
         .then((res) => res.json())
         .then(
           (status: {
@@ -301,7 +302,7 @@ export default function WhatsappPairDialog({
   const handleClose = () => {
     if (!linkedRef.current) {
       // Cancel the pairing attempt server-side; best effort.
-      void fetch("/api/integrations/whatsapp/disconnect", {
+      void apiFetch("/api/integrations/whatsapp/disconnect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId }),
