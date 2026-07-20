@@ -72,7 +72,7 @@ export default function SignInForm() {
           Don&apos;t have an account?{" "}
           <Link
             href="/sign-up"
-            className="font-medium text-white transition-colors hover:text-zinc-300"
+            className="font-medium text-zinc-900 transition-colors hover:text-zinc-600 dark:text-white dark:hover:text-zinc-300"
           >
             Sign up
           </Link>
@@ -109,7 +109,7 @@ export default function SignInForm() {
         <div className="-mt-2 text-right">
           <Link
             href="/forgot-password"
-            className="text-sm font-medium text-zinc-400 transition-colors hover:text-white"
+            className="text-sm font-medium text-zinc-500 transition-colors hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
           >
             Forgot password?
           </Link>

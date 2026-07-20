@@ -5,6 +5,7 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  color-scheme: light;
 }
 
 @theme inline {
@@ -14,11 +15,10 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+.dark {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+  color-scheme: dark;
 }
 
 html {
@@ -34,9 +34,14 @@ body {
 /* Landing page helpers */
 .bg-grid {
   background-image:
+    linear-gradient(to right, rgb(9 9 11 / 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(9 9 11 / 0.05) 1px, transparent 1px);
+  background-size: 56px 56px;
+}
+.dark .bg-grid {
+  background-image:
     linear-gradient(to right, rgb(255 255 255 / 0.04) 1px, transparent 1px),
     linear-gradient(to bottom, rgb(255 255 255 / 0.04) 1px, transparent 1px);
-  background-size: 56px 56px;
 }
 
 @keyframes fade-up {

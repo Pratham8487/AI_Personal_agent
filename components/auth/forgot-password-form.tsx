@@ -61,7 +61,7 @@ export default function ForgotPasswordForm() {
   const backToSignIn = (
     <Link
       href="/sign-in"
-      className="font-medium text-white transition-colors hover:text-zinc-300"
+      className="font-medium text-zinc-900 transition-colors hover:text-zinc-600 dark:text-white dark:hover:text-zinc-300"
     >
       ← Back to sign in
     </Link>
@@ -74,7 +74,7 @@ export default function ForgotPasswordForm() {
         subtitle="Your password has been changed and all devices were signed out."
         footer={backToSignIn}
       >
-        <p className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3.5 py-2.5 text-sm text-emerald-300">
+        <p className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3.5 py-2.5 text-sm text-emerald-700 dark:text-emerald-300">
           Sign in with your new password to continue.
         </p>
       </AuthCard>
@@ -91,7 +91,7 @@ export default function ForgotPasswordForm() {
         <form onSubmit={handleResetSubmit} className="flex flex-col gap-4">
           <FormError message={error} />
           {notice && (
-            <p className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3.5 py-2.5 text-sm text-emerald-300">
+            <p className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3.5 py-2.5 text-sm text-emerald-700 dark:text-emerald-300">
               {notice}
             </p>
           )}
@@ -122,7 +122,7 @@ export default function ForgotPasswordForm() {
             type="button"
             onClick={requestCode}
             disabled={pending || cooldown > 0}
-            className="text-sm font-medium text-zinc-400 transition-colors hover:text-white disabled:opacity-60"
+            className="text-sm font-medium text-zinc-500 transition-colors hover:text-zinc-900 disabled:opacity-60 dark:text-zinc-400 dark:hover:text-white"
           >
             {cooldown > 0
               ? `Resend code in ${cooldown}s`

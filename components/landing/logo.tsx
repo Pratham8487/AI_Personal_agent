@@ -7,7 +7,7 @@ export default function Logo({ className = "" }: { className?: string }) {
       <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500 to-fuchsia-500 shadow-lg shadow-violet-500/25">
         <SparklesIcon className="h-4.5 w-4.5 text-white" />
       </span>
-      <span className="text-lg font-semibold tracking-tight text-white">
+      <span className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-white">
         Aster
       </span>
     </Link>

@@ -88,7 +88,7 @@ export default function SignUpForm() {
           Already have an account?{" "}
           <Link
             href="/sign-in"
-            className="font-medium text-white transition-colors hover:text-zinc-300"
+            className="font-medium text-zinc-900 transition-colors hover:text-zinc-600 dark:text-white dark:hover:text-zinc-300"
           >
             Sign in
           </Link>

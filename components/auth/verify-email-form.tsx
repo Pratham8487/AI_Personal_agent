@@ -61,7 +61,7 @@ export default function VerifyEmailForm({
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
       <FormError message={error} />
       {notice && (
-        <p className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3.5 py-2.5 text-sm text-emerald-300">
+        <p className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3.5 py-2.5 text-sm text-emerald-700 dark:text-emerald-300">
           {notice}
         </p>
       )}
@@ -81,7 +81,7 @@ export default function VerifyEmailForm({
         type="button"
         onClick={handleResend}
         disabled={pending || cooldown > 0}
-        className="text-sm font-medium text-zinc-400 transition-colors hover:text-white disabled:opacity-60"
+        className="text-sm font-medium text-zinc-500 transition-colors hover:text-zinc-900 disabled:opacity-60 dark:text-zinc-400 dark:hover:text-white"
       >
         {cooldown > 0
           ? `Resend code in ${cooldown}s`
@@ -90,7 +90,7 @@ export default function VerifyEmailForm({
       <button
         type="button"
         onClick={finish}
-        className="text-sm font-medium text-zinc-500 transition-colors hover:text-zinc-300"
+        className="text-sm font-medium text-zinc-500 transition-colors hover:text-zinc-700 dark:hover:text-zinc-300"
       >
         Skip for now →
       </button>

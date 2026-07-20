@@ -29,7 +29,7 @@ export default function Home() {
   }, [isLoaded, user, router]);
 
   return (
-    <div className="flex flex-1 items-center justify-center bg-zinc-950 text-sm text-zinc-500">
+    <div className="flex flex-1 items-center justify-center bg-zinc-50 text-sm text-zinc-500 dark:bg-zinc-950">
       Checking your session…
     </div>
   );
