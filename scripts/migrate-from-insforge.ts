@@ -80,7 +80,7 @@ const TABLES: TableSpec[] = [
   },
   {
     name: "user_settings",
-    columns: ["user_id", "briefing_time", "timezone", "language", "channels", "updated_at"],
+    columns: ["user_id", "briefing_time", "timezone", "channels", "updated_at"],
     jsonb: ["channels"],
     orderBy: "user_id",
   },

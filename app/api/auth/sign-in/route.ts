@@ -17,7 +17,6 @@ type UserRow = {
   providers: string[];
   email_verified: boolean;
   contact_verified: boolean;
-  preferred_language: string;
   tour_completed: boolean;
   active: boolean;
   password_hash: string | null;
@@ -40,7 +39,7 @@ export async function POST(request: Request) {
   try {
     const rows = await adminSql<UserRow>(
       `SELECT id, email, name, avatar_url, phone, providers, email_verified,
-              contact_verified, preferred_language, tour_completed, active, password_hash
+              contact_verified, tour_completed, active, password_hash
        FROM public.users WHERE lower(email) = $1`,
       [email]
     );
@@ -77,7 +76,6 @@ export async function POST(request: Request) {
       providers: row!.providers ?? [],
       emailVerified: row!.email_verified,
       contactVerified: row!.contact_verified,
-      preferredLanguage: row!.preferred_language,
       tourCompleted: row!.tour_completed,
       active: row!.active,
     };

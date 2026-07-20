@@ -12,7 +12,6 @@ type UserRow = {
   providers: string[];
   email_verified: boolean;
   contact_verified: boolean;
-  preferred_language: string;
   tour_completed: boolean;
   active: boolean;
 };
@@ -58,7 +57,7 @@ export async function POST(request: Request) {
        SET email_verified = true, contact_verified = true, updated_at = now()
        WHERE lower(email) = $1
        RETURNING id, email, name, avatar_url, phone, providers, email_verified,
-                 contact_verified, preferred_language, tour_completed, active`,
+                 contact_verified, tour_completed, active`,
       [email]
     );
     if (rows.length === 0) {
@@ -74,7 +73,6 @@ export async function POST(request: Request) {
       providers: row.providers ?? [],
       emailVerified: row.email_verified,
       contactVerified: row.contact_verified,
-      preferredLanguage: row.preferred_language,
       tourCompleted: row.tour_completed,
       active: row.active,
     };

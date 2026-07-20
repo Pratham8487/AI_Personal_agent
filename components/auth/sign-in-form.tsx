@@ -3,22 +3,24 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { isValidEmail, signIn, signInWithGoogle } from "@/lib/auth-client";
+import { isValidEmail, signIn, signInWithGitHub, signInWithGoogle } from "@/lib/auth-client";
 import AuthCard from "./auth-card";
 import AuthDivider from "./auth-divider";
 import FormError from "./form-error";
+import GitHubButton from "./github-button";
 import GoogleButton from "./google-button";
 import SubmitButton from "./submit-button";
 import TextField from "./text-field";
 
-/** Friendly message for ?error= codes set by the Google callback redirect. */
-function googleCallbackError(): string | null {
+/** Friendly message for ?error= codes set by the OAuth callback redirects. */
+function oauthCallbackError(): string | null {
   if (typeof window === "undefined") return null;
   const code = new URLSearchParams(window.location.search).get("error");
   if (!code) return null;
-  if (code === "google_denied") return "Google sign-in was cancelled.";
   if (code === "account_disabled") return "This account is disabled.";
-  return "Google sign-in failed. Please try again.";
+  const provider = code.startsWith("github") ? "GitHub" : "Google";
+  if (code.endsWith("_denied")) return `${provider} sign-in was cancelled.`;
+  return `${provider} sign-in failed. Please try again.`;
 }
 
 export default function SignInForm() {
@@ -26,7 +28,7 @@ export default function SignInForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(googleCallbackError);
+  const [error, setError] = useState<string | null>(oauthCallbackError);
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -56,6 +58,11 @@ export default function SignInForm() {
     signInWithGoogle(); // full-page redirect
   }
 
+  function handleGitHub() {
+    setError(null);
+    signInWithGitHub(); // full-page redirect
+  }
+
   return (
     <AuthCard
       title="Welcome back"
@@ -72,7 +79,10 @@ export default function SignInForm() {
         </>
       }
     >
-      <GoogleButton onClick={handleGoogle} pending={pending} />
+      <div className="flex flex-col gap-3">
+        <GoogleButton onClick={handleGoogle} pending={pending} />
+        <GitHubButton onClick={handleGitHub} pending={pending} />
+      </div>
       <AuthDivider />
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <FormError message={error} />

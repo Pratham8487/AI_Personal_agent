@@ -14,7 +14,6 @@ export type DeliveryChannels = {
 export type UserSettings = {
   briefing_time: string; // "08:00" (24h)
   timezone: string;
-  language: string;
   channels: DeliveryChannels;
 };
 
@@ -58,7 +57,6 @@ export function useUserSettings(userId: string | undefined) {
           settings: {
             briefing_time?: string;
             timezone?: string;
-            language?: string;
             channels?: unknown;
           } | null;
         };
@@ -68,7 +66,6 @@ export function useUserSettings(userId: string | undefined) {
         settingsCache.set(userId, {
           briefing_time: data?.briefing_time ?? "08:00",
           timezone: data?.timezone ?? detectTimezone(),
-          language: data?.language ?? "English",
           channels: parseChannels(data?.channels),
         });
         setLoadError(null);

@@ -50,6 +50,15 @@ export function InboxIcon(props: IconProps) {
   );
 }
 
+export function MailIcon(props: IconProps) {
+  return (
+    <StrokeIcon {...props}>
+      <rect x="2" y="4" width="20" height="16" rx="2" />
+      <path d="m2 7 10 6 10-6" />
+    </StrokeIcon>
+  );
+}
+
 export function BellIcon(props: IconProps) {
   return (
     <StrokeIcon {...props}>

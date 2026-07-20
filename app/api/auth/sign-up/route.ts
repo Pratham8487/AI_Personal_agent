@@ -19,7 +19,6 @@ type UserRow = {
   providers: string[];
   email_verified: boolean;
   contact_verified: boolean;
-  preferred_language: string;
   tour_completed: boolean;
   active: boolean;
 };
@@ -34,7 +33,6 @@ function toUser(row: UserRow): SessionUser {
     providers: row.providers ?? [],
     emailVerified: row.email_verified,
     contactVerified: row.contact_verified,
-    preferredLanguage: row.preferred_language,
     tourCompleted: row.tour_completed,
     active: row.active,
   };
@@ -73,7 +71,7 @@ export async function POST(request: Request) {
        VALUES ($1, $2, $3, ARRAY['email'], false, 'email', now())
        ON CONFLICT (email) DO NOTHING
        RETURNING id, email, name, avatar_url, phone, providers, email_verified,
-                 contact_verified, preferred_language, tour_completed, active`,
+                 contact_verified, tour_completed, active`,
       [email, name, passwordHash]
     );
     if (rows.length === 0) {

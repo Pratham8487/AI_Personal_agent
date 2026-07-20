@@ -20,7 +20,6 @@ export type SessionUser = {
   providers: string[];
   emailVerified: boolean;
   contactVerified: boolean;
-  preferredLanguage: string;
   tourCompleted: boolean;
   active: boolean;
 };
@@ -150,7 +149,6 @@ type UserRow = {
   providers: string[];
   email_verified: boolean;
   contact_verified: boolean;
-  preferred_language: string;
   tour_completed: boolean;
   active: boolean;
 };
@@ -165,7 +163,6 @@ function toSessionUser(row: UserRow): SessionUser {
     providers: row.providers ?? [],
     emailVerified: row.email_verified,
     contactVerified: row.contact_verified,
-    preferredLanguage: row.preferred_language,
     tourCompleted: row.tour_completed,
     active: row.active,
   };
@@ -185,8 +182,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
   const candidates = await adminSql<UserRow>(
     `SELECT t.id AS token_id, t.token_hash, t.last_used_at,
             u.id, u.email, u.name, u.avatar_url, u.phone, u.providers,
-            u.email_verified, u.contact_verified, u.preferred_language,
-            u.tour_completed, u.active
+            u.email_verified, u.contact_verified, u.tour_completed, u.active
      FROM public.user_access_tokens t
      JOIN public.users u ON u.id = t.user_id
      WHERE t.token_prefix = $1 AND t.revoked = false AND t.expires_at > now()

@@ -11,7 +11,6 @@ type UserRow = {
   providers: string[];
   email_verified: boolean;
   contact_verified: boolean;
-  preferred_language: string;
   tour_completed: boolean;
   active: boolean;
 };
@@ -23,7 +22,7 @@ export async function PATCH(request: Request) {
   const sessionUser = await getSessionUser();
   if (!sessionUser) return unauthorized();
 
-  let body: { preferredLanguage?: string; tourCompleted?: boolean; name?: string };
+  let body: { tourCompleted?: boolean; name?: string };
   try {
     body = await request.json();
   } catch {
@@ -33,17 +32,6 @@ export async function PATCH(request: Request) {
   const sets: string[] = [];
   const params: unknown[] = [sessionUser.id];
 
-  if (body.preferredLanguage !== undefined) {
-    if (
-      typeof body.preferredLanguage !== "string" ||
-      !/^[a-z]{2}(-[A-Za-z]{2})?$/.test(body.preferredLanguage) ||
-      body.preferredLanguage.length > 5
-    ) {
-      return Response.json({ error: "Invalid language code." }, { status: 400 });
-    }
-    params.push(body.preferredLanguage);
-    sets.push(`preferred_language = $${params.length}`);
-  }
   if (body.tourCompleted !== undefined) {
     if (typeof body.tourCompleted !== "boolean") {
       return Response.json({ error: "Invalid tourCompleted value." }, { status: 400 });
@@ -66,7 +54,7 @@ export async function PATCH(request: Request) {
     `UPDATE public.users SET ${sets.join(", ")}, updated_at = now()
      WHERE id = $1
      RETURNING id, email, name, avatar_url, phone, providers, email_verified,
-               contact_verified, preferred_language, tour_completed, active`,
+               contact_verified, tour_completed, active`,
     params
   );
   const row = rows[0];
@@ -79,7 +67,6 @@ export async function PATCH(request: Request) {
     providers: row.providers ?? [],
     emailVerified: row.email_verified,
     contactVerified: row.contact_verified,
-    preferredLanguage: row.preferred_language,
     tourCompleted: row.tour_completed,
     active: row.active,
   };

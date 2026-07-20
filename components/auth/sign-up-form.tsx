@@ -6,12 +6,14 @@ import { useRouter } from "next/navigation";
 import {
   isValidEmail,
   PASSWORD_MIN_LENGTH,
+  signInWithGitHub,
   signInWithGoogle,
   signUp,
 } from "@/lib/auth-client";
 import AuthCard from "./auth-card";
 import AuthDivider from "./auth-divider";
 import FormError from "./form-error";
+import GitHubButton from "./github-button";
 import GoogleButton from "./google-button";
 import SubmitButton from "./submit-button";
 import TextField from "./text-field";
@@ -61,6 +63,11 @@ export default function SignUpForm() {
     signInWithGoogle(); // full-page redirect
   }
 
+  function handleGitHub() {
+    setError(null);
+    signInWithGitHub(); // full-page redirect
+  }
+
   if (verifyEmailFor) {
     return (
       <AuthCard
@@ -88,7 +95,10 @@ export default function SignUpForm() {
         </>
       }
     >
-      <GoogleButton onClick={handleGoogle} pending={pending} />
+      <div className="flex flex-col gap-3">
+        <GoogleButton onClick={handleGoogle} pending={pending} />
+        <GitHubButton onClick={handleGitHub} pending={pending} />
+      </div>
       <AuthDivider />
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <FormError message={error} />

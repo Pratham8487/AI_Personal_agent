@@ -5,7 +5,6 @@ import { getSessionUser, unauthorized } from "@/lib/server/session";
 type SettingsRow = {
   briefing_time: string;
   timezone: string;
-  language: string;
   channels: Record<string, boolean>;
 };
 
@@ -14,7 +13,7 @@ export async function GET() {
   if (!user) return unauthorized();
 
   const rows = await adminSql<SettingsRow>(
-    `SELECT briefing_time, timezone, language, channels
+    `SELECT briefing_time, timezone, channels
      FROM public.user_settings WHERE user_id = $1`,
     [user.id]
   );
@@ -31,7 +30,6 @@ export async function PUT(request: Request) {
   let body: {
     briefing_time?: string;
     timezone?: string;
-    language?: string;
     channels?: Record<string, unknown>;
   };
   try {
@@ -42,15 +40,11 @@ export async function PUT(request: Request) {
 
   const briefingTime = body.briefing_time ?? "08:00";
   const timezone = body.timezone ?? "UTC";
-  const language = body.language ?? "English";
   if (!/^\d{2}:\d{2}$/.test(briefingTime)) {
     return Response.json({ error: "Invalid briefing time." }, { status: 400 });
   }
   if (typeof timezone !== "string" || timezone.length > 100) {
     return Response.json({ error: "Invalid timezone." }, { status: 400 });
-  }
-  if (typeof language !== "string" || language.length > 50) {
-    return Response.json({ error: "Invalid language." }, { status: 400 });
   }
   const raw = body.channels ?? {};
   const channels = {
@@ -61,16 +55,15 @@ export async function PUT(request: Request) {
   };
 
   const rows = await adminSql<SettingsRow>(
-    `INSERT INTO public.user_settings (user_id, briefing_time, timezone, language, channels, updated_at)
-     VALUES ($1, $2, $3, $4, $5::jsonb, now())
+    `INSERT INTO public.user_settings (user_id, briefing_time, timezone, channels, updated_at)
+     VALUES ($1, $2, $3, $4::jsonb, now())
      ON CONFLICT (user_id) DO UPDATE SET
        briefing_time = EXCLUDED.briefing_time,
        timezone = EXCLUDED.timezone,
-       language = EXCLUDED.language,
        channels = EXCLUDED.channels,
        updated_at = now()
-     RETURNING briefing_time, timezone, language, channels`,
-    [user.id, briefingTime, timezone, language, JSON.stringify(channels)]
+     RETURNING briefing_time, timezone, channels`,
+    [user.id, briefingTime, timezone, JSON.stringify(channels)]
   );
   return Response.json({ settings: rows[0] });
 }

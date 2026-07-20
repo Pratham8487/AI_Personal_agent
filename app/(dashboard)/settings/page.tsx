@@ -1,13 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import type { ReactNode } from "react";
 import Link from "next/link";
 import Badge from "@/components/dashboard/badge";
 import Card from "@/components/dashboard/card";
 import PageHeader from "@/components/dashboard/page-header";
 import PricingSettings from "@/components/dashboard/pricing-settings";
 import Select from "@/components/dashboard/select";
-import { updateProfile, userDisplayName } from "@/lib/auth-client";
+import SignInMethods from "@/components/dashboard/sign-in-methods";
+import { userDisplayName } from "@/lib/auth-client";
 import { useCurrentUser } from "@/lib/use-current-user";
 import {
   useUserSettings,
@@ -16,17 +17,6 @@ import {
 } from "@/lib/use-user-settings";
 
 const BRIEFING_TIMES = ["06:00", "07:00", "08:00", "09:00", "10:00", "12:00", "18:00", "20:00"];
-
-const LANGUAGES = ["English", "Hindi", "Gujarati", "Spanish"];
-
-// UI locale (users.preferred_language) — distinct from the briefing output
-// language above, which lives in user_settings.language.
-const APP_LANGUAGES = [
-  { value: "en", label: "English" },
-  { value: "hi", label: "हिन्दी" },
-  { value: "gu", label: "ગુજરાતી" },
-  { value: "es", label: "Español" },
-];
 
 const CHANNEL_LABELS: { key: keyof DeliveryChannels; label: string }[] = [
   { key: "in_app", label: "In-app" },
@@ -92,36 +82,16 @@ function PreferenceRows({
         <p className="text-sm text-zinc-700 dark:text-zinc-200">Timezone</p>
         <p className="text-sm text-zinc-500 dark:text-zinc-400">{settings.timezone}</p>
       </li>
-      <li className="flex items-center justify-between gap-3">
-        <p className="text-sm text-zinc-700 dark:text-zinc-200">Language</p>
-        <Select
-          ariaLabel="Language"
-          value={settings.language}
-          onChange={(language) => onUpdate({ language })}
-          options={LANGUAGES.map((language) => ({
-            value: language,
-            label: language,
-          }))}
-        />
-      </li>
     </ul>
   );
 }
 
 export default function SettingsPage() {
-  const { user, isLoaded, setUser } = useCurrentUser();
+  const { user, isLoaded } = useCurrentUser();
   const { settings, isLoading, loadError, isSaving, saveError, update } =
     useUserSettings(user?.id);
-  const [appLanguageError, setAppLanguageError] = useState<string | null>(null);
 
-  async function handleAppLanguage(preferredLanguage: string) {
-    setAppLanguageError(null);
-    const { user: updated, error } = await updateProfile({ preferredLanguage });
-    if (updated) setUser(updated);
-    else setAppLanguageError(error ?? "Could not save your language.");
-  }
-
-  const settingsBody = (content: React.ReactNode) => {
+  const settingsBody = (content: ReactNode) => {
     if (!isLoaded || isLoading) return <SkeletonRows />;
     if (!user) return <SignInHint />;
     if (loadError || !settings) {
@@ -172,34 +142,14 @@ export default function SettingsPage() {
                 <p className="text-xs text-zinc-500 dark:text-zinc-400">
                   {user.email}
                 </p>
-                <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
-                  Signed in with{" "}
-                  {user.providers?.includes("google") ? "Google" : "email"}
-                </p>
+                <SignInMethods providers={user.providers} />
               </div>
             </div>
           )}
         </Card>
-        <Card title="Preferences" subtitle={appLanguageError ?? statusSubtitle}>
+        <Card title="Preferences" subtitle={statusSubtitle}>
           {settingsBody(
-            settings && (
-              <>
-                <PreferenceRows settings={settings} onUpdate={update} />
-                {user && (
-                  <ul className="mt-4 space-y-4">
-                    <li className="flex items-center justify-between gap-3">
-                      <p className="text-sm text-zinc-700 dark:text-zinc-200">App language</p>
-                      <Select
-                        ariaLabel="App language"
-                        value={user.preferredLanguage}
-                        onChange={handleAppLanguage}
-                        options={APP_LANGUAGES}
-                      />
-                    </li>
-                  </ul>
-                )}
-              </>
-            ),
+            settings && <PreferenceRows settings={settings} onUpdate={update} />,
           )}
         </Card>
         <Card

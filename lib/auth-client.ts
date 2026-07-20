@@ -9,7 +9,6 @@ export type AuthUser = {
   providers: string[];
   emailVerified: boolean;
   contactVerified: boolean;
-  preferredLanguage: string;
   tourCompleted: boolean;
   active: boolean;
 };
@@ -141,7 +140,6 @@ export async function resetPassword(input: {
 }
 
 export async function updateProfile(patch: {
-  preferredLanguage?: string;
   tourCompleted?: boolean;
   name?: string;
 }): Promise<AuthResult> {
@@ -175,6 +173,11 @@ export const PASSWORD_MIN_LENGTH = 6;
 /** Full-page redirect into the Google OAuth flow. */
 export function signInWithGoogle(): void {
   window.location.assign("/api/auth/google");
+}
+
+/** Full-page redirect into the GitHub OAuth flow. */
+export function signInWithGitHub(): void {
+  window.location.assign("/api/auth/github");
 }
 
 /** Human-friendly label for the signed-in user (name, phone, or email). */
