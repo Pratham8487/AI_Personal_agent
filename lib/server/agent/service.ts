@@ -1,11 +1,12 @@
+import type { AgentStreamEvent } from "@/lib/agent-protocol";
 import { aiConnection, chatJson } from "@/lib/server/brief-ai";
 import { toolTitle } from "@/lib/tool-title";
 import {
+  attachSuggestions,
   conversationExists,
   createConversation,
   getActiveConversationId,
-  listMessages,
-  pruneExpired,
+  listRecentMessages,
   saveMessage,
   touchConversation,
 } from "./store";
@@ -18,23 +19,16 @@ import {
 
 /**
  * Streaming chat agent over the OpenAI-compatible Chat Completions API.
- * Runs a bounded tool loop (Gmail/WhatsApp MCP tools) and reports progress
- * through NDJSON-able events consumed by app/api/agent/chat/route.ts.
+ * Runs a bounded tool loop over the user's connected MCP catalogs and reports
+ * progress as AgentStreamEvents, which the route serializes as NDJSON.
  */
 
 const MAX_TOOL_ROUNDS = 5;
+/** Turns of prior context sent to the model (the most recent ones). */
 const HISTORY_MESSAGES = 24;
 const HISTORY_CHARS = 4_000;
 const TOOL_RESULT_CHARS = 8_000;
 const COMPLETION_TIMEOUT_MS = 60_000;
-
-export type AgentStreamEvent =
-  | { type: "meta"; conversationId: string }
-  | { type: "status"; app: string; label: string }
-  | { type: "delta"; text: string }
-  | { type: "suggestions"; items: string[] }
-  | { type: "done"; messageId: string | null; apps: string[] }
-  | { type: "error"; message: string };
 
 type WireToolCall = {
   id: string;
@@ -52,13 +46,18 @@ type CompletionResult = {
   toolCalls: WireToolCall[];
 };
 
-function buildSystemPrompt(providers: string[], hasTools: boolean): string {
+function buildSystemPrompt(providers: string[], liveApps: string[]): string {
   const connected = providers.length ? providers.join(", ") : "none";
+  const hasTools = liveApps.length > 0;
   return `You are Aster, the user's personal AI assistant. You answer questions about their day and their connected apps.
 Current time: ${new Date().toISOString()}.
-Connected apps: ${connected}. Live data tools exist only for Gmail and WhatsApp.
+Connected apps: ${connected}. Live data tools are available for: ${hasTools ? liveApps.join(", ") : "none"}.
 Rules:
-- ${hasTools ? "For any question about the user's real emails, messages, contacts, or activity, call the tools to fetch live data BEFORE answering. Prefer small counts." : "No live data tools are available. Answer generally and suggest connecting Gmail or WhatsApp on the Integrations page for live answers."}
+- ${
+    hasTools
+      ? "For any question about the user's real emails, messages, contacts, or activity, call the tools to fetch live data BEFORE answering. Prefer small counts, and batch independent lookups into a single round."
+      : "No live data tools are available. Answer generally and suggest connecting Gmail or WhatsApp on the Integrations page for live answers."
+  }
 - NEVER invent senders, messages, counts, times, or content. If a tool fails or returns nothing, say so plainly.
 - Ask before sending any email or message on the user's behalf unless they explicitly asked you to send it.
 - Format answers in GitHub-flavored markdown: short headings, bullet lists, tables for structured comparisons, **bold** for key facts, fenced code blocks only for code.
@@ -106,12 +105,16 @@ async function readCompletionStream(
       content += delta.content;
       onDelta(delta.content);
     }
+    // Providers stream tool calls as fragments keyed by index; name and
+    // arguments both arrive split across chunks and must be concatenated.
     for (const call of delta.tool_calls ?? []) {
       const index = call.index ?? 0;
       partials[index] ??= { id: "", name: "", args: "" };
       if (call.id) partials[index].id = call.id;
       if (call.function?.name) partials[index].name += call.function.name;
-      if (call.function?.arguments) partials[index].args += call.function.arguments;
+      if (call.function?.arguments) {
+        partials[index].args += call.function.arguments;
+      }
     }
   };
 
@@ -135,6 +138,15 @@ async function readCompletionStream(
   return { content, toolCalls };
 }
 
+/** Releases an unread error-response body so the socket is not held open. */
+async function discard(res: Response): Promise<void> {
+  try {
+    await res.body?.cancel();
+  } catch {
+    // already closed
+  }
+}
+
 /**
  * One completion round. Tries streaming; providers that reject streaming
  * (400) get one non-streaming retry whose text is emitted as a single delta.
@@ -144,6 +156,7 @@ async function completeOnce(
   tools: AgentTool[],
   allowTools: boolean,
   onDelta: (text: string) => void,
+  signal: AbortSignal | undefined,
 ): Promise<CompletionResult> {
   const { apiKey, model, baseUrl } = aiConnection();
   const body = {
@@ -163,15 +176,21 @@ async function completeOnce(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ ...body, stream }),
-      signal: AbortSignal.timeout(COMPLETION_TIMEOUT_MS),
+      signal: signal
+        ? AbortSignal.any([signal, AbortSignal.timeout(COMPLETION_TIMEOUT_MS)])
+        : AbortSignal.timeout(COMPLETION_TIMEOUT_MS),
     });
 
   let res = await request(true);
   // Provider 5xx errors are usually transient; retry once before failing.
-  if (res.status >= 500) res = await request(true);
+  if (res.status >= 500) {
+    await discard(res);
+    res = await request(true);
+  }
   if (res.ok) return readCompletionStream(res, onDelta);
 
   if (res.status === 400) {
+    await discard(res);
     res = await request(false);
     if (res.ok) {
       const parsed = (await res.json()) as {
@@ -180,12 +199,15 @@ async function completeOnce(
         }[];
       };
       const message = parsed.choices?.[0]?.message;
-      const content = typeof message?.content === "string" ? message.content : "";
+      const content =
+        typeof message?.content === "string" ? message.content : "";
       if (content) onDelta(content);
       return { content, toolCalls: message?.tool_calls ?? [] };
     }
   }
-  throw new Error(`AI request failed (${res.status}).`);
+  const status = res.status;
+  await discard(res);
+  throw new Error(`AI request failed (${status}).`);
 }
 
 function parseToolArgs(raw: string): Record<string, unknown> {
@@ -214,11 +236,14 @@ Each suggestion: a natural next prompt the user might tap, under 55 characters, 
     );
     const items = (parsed as { suggestions?: unknown })?.suggestions;
     if (!Array.isArray(items)) return [];
+    const seen = new Set<string>();
     return items
       .filter((item): item is string => typeof item === "string")
       .map((item) => item.trim())
       .filter(Boolean)
       .map((item) => (item.length > 80 ? `${item.slice(0, 79)}…` : item))
+      // Duplicate prompts would collide as React keys in the chip row.
+      .filter((item) => !seen.has(item) && seen.add(item))
       .slice(0, 3);
   } catch {
     return [];
@@ -230,10 +255,9 @@ export async function runAgentChat(options: {
   conversationId: string | null;
   message: string;
   emit: (event: AgentStreamEvent) => void;
+  signal?: AbortSignal;
 }): Promise<void> {
-  const { userId, message, emit } = options;
-
-  pruneExpired(userId).catch(() => {});
+  const { userId, message, emit, signal } = options;
 
   let conversationId = options.conversationId;
   if (!conversationId || !(await conversationExists(userId, conversationId))) {
@@ -243,14 +267,15 @@ export async function runAgentChat(options: {
   }
   emit({ type: "meta", conversationId });
 
-  const history = await listMessages(conversationId, HISTORY_MESSAGES);
+  const history = await listRecentMessages(conversationId, HISTORY_MESSAGES);
   await saveMessage(conversationId, userId, "user", message);
 
   const providers = await connectedProviders(userId);
   const tools = buildAgentTools(providers);
+  const liveApps = [...new Set(tools.map((tool) => tool.provider))];
 
   const messages: WireMessage[] = [
-    { role: "system", content: buildSystemPrompt(providers, tools.length > 0) },
+    { role: "system", content: buildSystemPrompt(providers, liveApps) },
     ...history.map(
       (row): WireMessage => ({
         role: row.role,
@@ -278,64 +303,110 @@ export async function runAgentChat(options: {
     emit({ type: "delta", text });
   };
 
-  for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
-    roundStart = fullText.length;
-    const allowTools = round < MAX_TOOL_ROUNDS - 1;
-    const result = await completeOnce(messages, tools, allowTools, onDelta);
+  let aborted = false;
+  try {
+    for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
+      roundStart = fullText.length;
+      // The final round runs without tools so the model must produce prose.
+      const allowTools = round < MAX_TOOL_ROUNDS - 1;
+      const result = await completeOnce(
+        messages,
+        tools,
+        allowTools,
+        onDelta,
+        signal,
+      );
 
-    if (!result.toolCalls.length) break;
+      if (!result.toolCalls.length) break;
 
-    messages.push({
-      role: "assistant",
-      content: result.content || null,
-      tool_calls: result.toolCalls,
-    });
-    for (const call of result.toolCalls) {
-      const tool = toolsByName.get(call.function.name);
-      if (!tool) {
+      messages.push({
+        role: "assistant",
+        content: result.content || null,
+        tool_calls: result.toolCalls,
+      });
+
+      // Announce every call in the round up front, then run them together:
+      // independent lookups (inbox + chats) no longer wait on each other,
+      // and the UI can show the whole checklist at once.
+      const planned = result.toolCalls.map((call) => ({
+        call,
+        tool: toolsByName.get(call.function.name),
+      }));
+      for (const { call, tool } of planned) {
+        if (!tool) continue;
+        emit({
+          type: "tool_start",
+          id: call.id,
+          app: tool.provider,
+          label: toolTitle(tool.toolName),
+        });
+      }
+
+      const outcomes = await Promise.all(
+        planned.map(async ({ call, tool }) => {
+          if (!tool) {
+            return {
+              call,
+              text: `Unknown tool: ${call.function.name}`,
+              ok: false,
+            };
+          }
+          const outcome = await executeAgentTool(
+            userId,
+            tool,
+            parseToolArgs(call.function.arguments),
+          );
+          if (outcome.ok) appsUsed.add(tool.provider);
+          return { call, text: outcome.text, ok: outcome.ok };
+        }),
+      );
+
+      for (const outcome of outcomes) {
+        emit({ type: "tool_end", id: outcome.call.id, ok: outcome.ok });
         messages.push({
           role: "tool",
-          tool_call_id: call.id,
-          content: `Unknown tool: ${call.function.name}`,
+          tool_call_id: outcome.call.id,
+          content: outcome.text.slice(0, TOOL_RESULT_CHARS),
         });
-        continue;
       }
-      emit({
-        type: "status",
-        app: tool.provider,
-        label: toolTitle(tool.toolName),
-      });
-      const output = await executeAgentTool(
-        userId,
-        tool,
-        parseToolArgs(call.function.arguments),
-      );
-      appsUsed.add(tool.provider);
-      messages.push({
-        role: "tool",
-        tool_call_id: call.id,
-        content: output.slice(0, TOOL_RESULT_CHARS),
-      });
     }
+  } catch (error) {
+    // A stop from the client is not a failure: keep whatever was generated
+    // and fall through so the partial answer is still persisted.
+    const isAbort =
+      signal?.aborted ||
+      (error instanceof DOMException && error.name === "AbortError");
+    if (!isAbort) throw error;
+    aborted = true;
   }
 
   if (!fullText.trim()) {
+    if (aborted) {
+      emit({ type: "done", messageId: null, apps: [] });
+      return;
+    }
     fullText = "I couldn't put together an answer this time. Please try again.";
     emit({ type: "delta", text: fullText });
   }
 
   const apps = [...appsUsed];
-  const suggestions = await generateSuggestions(message, fullText);
   const messageId = await saveMessage(
     conversationId,
     userId,
     "assistant",
     fullText,
     apps,
-    suggestions,
   );
   await touchConversation(conversationId);
 
-  if (suggestions.length) emit({ type: "suggestions", items: suggestions });
+  // Answer is complete — stop the "generating" UI before spending another
+  // model round-trip on quick replies.
   emit({ type: "done", messageId, apps });
+
+  if (aborted) return;
+  const suggestions = await generateSuggestions(message, fullText);
+  if (suggestions.length) {
+    await attachSuggestions(messageId, suggestions);
+    emit({ type: "suggestions", items: suggestions });
+  }
 }

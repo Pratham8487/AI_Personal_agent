@@ -1,18 +1,32 @@
 "use client";
 
-import { Fragment, useMemo, type ReactNode } from "react";
+import { Fragment, memo, useMemo, type ReactNode } from "react";
 
 /**
  * Minimal GitHub-flavored markdown renderer for chat bubbles. Builds React
  * nodes directly (never HTML strings), so model output cannot inject markup.
- * Supports: headings, ordered/unordered lists, fenced code, inline code,
- * links, tables, bold/italic/strikethrough, blockquotes, and rules.
+ *
+ * Supports: headings, nested ordered/unordered lists, task lists, fenced code,
+ * inline code, links, tables, bold/italic/strikethrough, blockquotes, rules.
+ *
+ * Streaming note: the full answer is re-parsed on every token, so each block
+ * is rendered through a memo that compares a cheap structural signature. Only
+ * the block currently being written re-renders; finished tables and code
+ * blocks above it stay untouched.
  */
+
+type ListItem = {
+  text: string;
+  /** Nested content (sub-lists, extra paragraphs) under this item. */
+  children: Block[];
+  /** null when the item is not a task-list entry. */
+  checked: boolean | null;
+};
 
 type Block =
   | { kind: "heading"; level: number; text: string }
   | { kind: "code"; lang: string; code: string }
-  | { kind: "list"; ordered: boolean; items: string[] }
+  | { kind: "list"; ordered: boolean; start: number; items: ListItem[] }
   | { kind: "table"; header: string[]; rows: string[][] }
   | { kind: "quote"; lines: string[] }
   | { kind: "hr" }
@@ -22,13 +36,27 @@ const FENCE = /^\s*```(\w*)\s*$/;
 const HEADING = /^(#{1,6})\s+(.+)$/;
 const RULE = /^ {0,3}(?:-{3,}|\*{3,}|_{3,})\s*$/;
 const QUOTE = /^\s*>\s?(.*)$/;
-const UL_ITEM = /^\s*[-*+]\s+(.+)$/;
-const OL_ITEM = /^\s*\d{1,3}[.)]\s+(.+)$/;
-const TABLE_DIVIDER = /^\s*\|?(?:\s*:?-{2,}:?\s*\|)+\s*:?-{2,}:?\s*\|?\s*$/;
+const UL_ITEM = /^(\s*)[-*+]\s+(.*)$/;
+const OL_ITEM = /^(\s*)(\d{1,9})[.)]\s+(.*)$/;
+const TASK = /^\[([ xX])\]\s+(.*)$/;
+const TABLE_DIVIDER =
+  /^\s*\|?(?:\s*:?-{2,}:?\s*\|)+\s*:?-{2,}:?\s*\|?\s*$/;
 
 const INLINE_SOURCE =
   /(`+)(.+?)\1|\*\*([^*]+?)\*\*|__([^_]+?)__|\*([^*\n]+?)\*|\b_([^_\n]+?)_\b|~~([^~]+?)~~|\[([^\]]+)\]\(([^)\s]+)\)/
     .source;
+
+/** Leading whitespace width, with tabs counted as four columns. */
+function indentOf(line: string): number {
+  const match = /^[ \t]*/.exec(line)?.[0] ?? "";
+  let width = 0;
+  for (const char of match) width += char === "\t" ? 4 : 1;
+  return width;
+}
+
+function isListLine(line: string): boolean {
+  return UL_ITEM.test(line) || OL_ITEM.test(line);
+}
 
 function splitTableRow(line: string): string[] {
   return line
@@ -37,6 +65,107 @@ function splitTableRow(line: string): string[] {
     .replace(/\|$/, "")
     .split("|")
     .map((cell) => cell.trim());
+}
+
+function isTableStart(lines: string[], index: number): boolean {
+  return (
+    lines[index].includes("|") &&
+    index + 1 < lines.length &&
+    TABLE_DIVIDER.test(lines[index + 1])
+  );
+}
+
+/** True when the line ends the paragraph it would otherwise continue. */
+function breaksParagraph(lines: string[], index: number): boolean {
+  const line = lines[index];
+  return (
+    !line.trim() ||
+    FENCE.test(line) ||
+    HEADING.test(line) ||
+    RULE.test(line) ||
+    QUOTE.test(line) ||
+    isListLine(line) ||
+    isTableStart(lines, index)
+  );
+}
+
+/**
+ * Parses one list, consuming nested items. Lines indented past the list's own
+ * marker are gathered and re-parsed as the item's children, which is what
+ * makes sub-lists render as sub-lists instead of collapsing flat.
+ */
+function parseList(
+  lines: string[],
+  start: number,
+): { block: Block; next: number } {
+  const first = lines[start];
+  const ordered = OL_ITEM.test(first) && !UL_ITEM.test(first);
+  const pattern = ordered ? OL_ITEM : UL_ITEM;
+  const baseIndent = indentOf(first);
+  const startNumber = ordered ? Number(OL_ITEM.exec(first)?.[2] ?? 1) : 1;
+
+  const items: ListItem[] = [];
+  let buffer: string[] = [];
+  let i = start;
+
+  const flush = () => {
+    if (!items.length) return;
+    // Children are dedented so nested parsing sees them at column zero.
+    const dedent = Math.min(
+      ...buffer.filter((l) => l.trim()).map((l) => indentOf(l)),
+    );
+    const owner = items[items.length - 1];
+    owner.children = buffer.some((l) => l.trim())
+      ? parseBlocks(buffer.map((l) => l.slice(dedent)).join("\n"))
+      : [];
+    buffer = [];
+  };
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    if (!line.trim()) {
+      // A blank line only continues the list if indented content follows.
+      const next = lines[i + 1];
+      if (next && next.trim() && indentOf(next) > baseIndent) {
+        buffer.push(line);
+        i += 1;
+        continue;
+      }
+      break;
+    }
+
+    const indent = indentOf(line);
+    const match = pattern.exec(line);
+
+    if (match && indent === baseIndent) {
+      flush();
+      const raw = (ordered ? match[3] : match[2]) ?? "";
+      const task = TASK.exec(raw);
+      items.push({
+        text: task ? task[2] : raw,
+        children: [],
+        checked: task ? task[1].toLowerCase() === "x" : null,
+      });
+      i += 1;
+      continue;
+    }
+
+    if (indent > baseIndent && items.length) {
+      buffer.push(line);
+      i += 1;
+      continue;
+    }
+
+    // A sibling marker of the other type, or dedented text: list is over.
+    break;
+  }
+  flush();
+
+  return {
+    block: { kind: "list", ordered, start: startNumber, items },
+    next: i,
+  };
 }
 
 function parseBlocks(text: string): Block[] {
@@ -67,11 +196,16 @@ function parseBlocks(text: string): Block[] {
 
     const heading = line.match(HEADING);
     if (heading) {
-      blocks.push({ kind: "heading", level: heading[1].length, text: heading[2] });
+      blocks.push({
+        kind: "heading",
+        level: heading[1].length,
+        text: heading[2],
+      });
       i += 1;
       continue;
     }
 
+    // Checked before lists so "---" is never read as a bullet.
     if (RULE.test(line)) {
       blocks.push({ kind: "hr" });
       i += 1;
@@ -90,22 +224,14 @@ function parseBlocks(text: string): Block[] {
       continue;
     }
 
-    const listMatch = line.match(UL_ITEM) ?? line.match(OL_ITEM);
-    if (listMatch) {
-      const ordered = OL_ITEM.test(line) && !UL_ITEM.test(line);
-      const pattern = ordered ? OL_ITEM : UL_ITEM;
-      const items: string[] = [];
-      while (i < lines.length) {
-        const item = lines[i].match(pattern);
-        if (!item) break;
-        items.push(item[1]);
-        i += 1;
-      }
-      blocks.push({ kind: "list", ordered, items });
+    if (isListLine(line)) {
+      const { block, next } = parseList(lines, i);
+      blocks.push(block);
+      i = next;
       continue;
     }
 
-    if (line.includes("|") && i + 1 < lines.length && TABLE_DIVIDER.test(lines[i + 1])) {
+    if (isTableStart(lines, i)) {
       const header = splitTableRow(line);
       i += 2;
       const rows: string[][] = [];
@@ -119,17 +245,7 @@ function parseBlocks(text: string): Block[] {
 
     const paragraph: string[] = [line];
     i += 1;
-    while (
-      i < lines.length &&
-      lines[i].trim() &&
-      !FENCE.test(lines[i]) &&
-      !HEADING.test(lines[i]) &&
-      !RULE.test(lines[i]) &&
-      !QUOTE.test(lines[i]) &&
-      !UL_ITEM.test(lines[i]) &&
-      !OL_ITEM.test(lines[i]) &&
-      !(lines[i].includes("|") && i + 1 < lines.length && TABLE_DIVIDER.test(lines[i + 1]))
-    ) {
+    while (i < lines.length && !breaksParagraph(lines, i)) {
       paragraph.push(lines[i]);
       i += 1;
     }
@@ -149,8 +265,18 @@ function renderInline(text: string): ReactNode {
   const inline = new RegExp(INLINE_SOURCE, "g");
   for (let match = inline.exec(text); match; match = inline.exec(text)) {
     if (match.index > last) nodes.push(text.slice(last, match.index));
-    const [, , code, bold, boldAlt, italic, italicAlt, strike, linkText, linkHref] =
-      match;
+    const [
+      ,
+      ,
+      code,
+      bold,
+      boldAlt,
+      italic,
+      italicAlt,
+      strike,
+      linkText,
+      linkHref,
+    ] = match;
     key += 1;
     if (code !== undefined) {
       nodes.push(
@@ -176,6 +302,7 @@ function renderInline(text: string): ReactNode {
         </span>,
       );
     } else if (linkText !== undefined) {
+      // Only http(s) is linkable; javascript:/data: URLs render as plain text.
       if (/^https?:\/\//i.test(linkHref ?? "")) {
         nodes.push(
           <a
@@ -189,7 +316,7 @@ function renderInline(text: string): ReactNode {
           </a>,
         );
       } else {
-        nodes.push(renderInline(linkText));
+        nodes.push(<Fragment key={key}>{renderInline(linkText)}</Fragment>);
       }
     }
     last = match.index + match[0].length;
@@ -213,12 +340,31 @@ const HEADING_CLASSES: Record<number, string> = {
   3: "text-sm font-semibold",
 };
 
-function renderBlock(block: Block, key: number): ReactNode {
+function renderListItems(items: ListItem[]): ReactNode {
+  return items.map((item, index) => (
+    <li key={index} className={item.checked === null ? "" : "list-none -ml-5"}>
+      {item.checked !== null && (
+        <input
+          type="checkbox"
+          checked={item.checked}
+          readOnly
+          aria-hidden
+          className="mr-2 align-middle accent-violet-500"
+        />
+      )}
+      {renderInline(item.text)}
+      {item.children.map((child, childIndex) => (
+        <BlockView key={childIndex} block={child} sig={signature(child)} />
+      ))}
+    </li>
+  ));
+}
+
+function renderBlock(block: Block): ReactNode {
   switch (block.kind) {
     case "heading":
       return (
         <p
-          key={key}
           className={`mt-4 mb-1.5 first:mt-0 ${
             HEADING_CLASSES[block.level] ?? "text-sm font-semibold"
           } text-zinc-900 dark:text-white`}
@@ -228,10 +374,7 @@ function renderBlock(block: Block, key: number): ReactNode {
       );
     case "code":
       return (
-        <pre
-          key={key}
-          className="my-2 overflow-x-auto rounded-lg bg-zinc-900 p-3 font-mono text-xs leading-relaxed text-zinc-100 dark:bg-black/50"
-        >
+        <pre className="my-2 overflow-x-auto rounded-lg bg-zinc-900 p-3 font-mono text-xs leading-relaxed text-zinc-100 dark:bg-black/50">
           <code>{block.code}</code>
         </pre>
       );
@@ -239,20 +382,18 @@ function renderBlock(block: Block, key: number): ReactNode {
       const ListTag = block.ordered ? "ol" : "ul";
       return (
         <ListTag
-          key={key}
+          start={block.ordered && block.start !== 1 ? block.start : undefined}
           className={`my-2 space-y-1 pl-5 ${
             block.ordered ? "list-decimal" : "list-disc"
-          }`}
+          } marker:text-zinc-400 dark:marker:text-zinc-500`}
         >
-          {block.items.map((item, index) => (
-            <li key={index}>{renderInline(item)}</li>
-          ))}
+          {renderListItems(block.items)}
         </ListTag>
       );
     }
     case "table":
       return (
-        <div key={key} className="my-2 overflow-x-auto">
+        <div className="my-2 overflow-x-auto">
           <table className="w-full border-collapse text-left text-xs">
             <thead>
               <tr>
@@ -285,27 +426,40 @@ function renderBlock(block: Block, key: number): ReactNode {
       );
     case "quote":
       return (
-        <blockquote
-          key={key}
-          className="my-2 border-l-2 border-violet-400 pl-3 text-zinc-500 italic dark:text-zinc-400"
-        >
+        <blockquote className="my-2 border-l-2 border-violet-400 pl-3 text-zinc-500 italic dark:text-zinc-400">
           {renderLines(block.lines)}
         </blockquote>
       );
     case "hr":
-      return (
-        <hr key={key} className="my-3 border-zinc-200 dark:border-white/10" />
-      );
+      return <hr className="my-3 border-zinc-200 dark:border-white/10" />;
     case "p":
       return (
-        <p key={key} className="my-2 leading-relaxed first:mt-0 last:mb-0">
+        <p className="my-2 leading-relaxed first:mt-0 last:mb-0">
           {renderLines(block.lines)}
         </p>
       );
   }
 }
 
+/** Cheap structural identity, used to skip re-rendering settled blocks. */
+function signature(block: Block): string {
+  return JSON.stringify(block);
+}
+
+const BlockView = memo(
+  function BlockView({ block }: { block: Block; sig: string }) {
+    return <>{renderBlock(block)}</>;
+  },
+  (prev, next) => prev.sig === next.sig,
+);
+
 export default function Markdown({ text }: { text: string }) {
   const blocks = useMemo(() => parseBlocks(text), [text]);
-  return <div className="min-w-0">{blocks.map(renderBlock)}</div>;
+  return (
+    <div className="min-w-0">
+      {blocks.map((block, index) => (
+        <BlockView key={index} block={block} sig={signature(block)} />
+      ))}
+    </div>
+  );
 }

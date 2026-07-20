@@ -1,7 +1,11 @@
 "use client";
 
 import ChatMessage from "@/components/agent/chat-message";
+import Composer from "@/components/agent/composer";
 import RecentSummary from "@/components/agent/recent-summary";
+import SuggestionCards, {
+  type Suggestion,
+} from "@/components/agent/suggestion-cards";
 import SuggestionChips from "@/components/agent/suggestion-chips";
 import AppIcon from "@/components/dashboard/app-icon";
 import Card from "@/components/dashboard/card";
@@ -10,18 +14,29 @@ import { PROVIDERS, STATUS_CONNECTED } from "@/lib/integrations";
 import { useAgentChat } from "@/lib/use-agent-chat";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { useIntegrations } from "@/lib/use-integrations";
-import { PlusSignIcon, SentIcon } from "@hugeicons/core-free-icons";
+import { useStickToBottom } from "@/lib/use-stick-to-bottom";
+import { ArrowDown01Icon, PlusSignIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { useMemo } from "react";
 
-const STARTER_CHIPS = [
-  "What are my important updates today?",
-  "Summarize my unread emails",
-  "What needs my reply today?",
-  "Any WhatsApp messages I missed?",
-  "Find risks in my inbox",
-  "Who messaged me most this week?",
+/** Prompts that make sense regardless of which apps are connected. */
+const BASE_SUGGESTIONS: Suggestion[] = [
+  { title: "What are my important updates today?" },
+  { title: "What needs my reply today?" },
 ];
+
+/** Prompts only offered once the app behind them can actually be queried. */
+const APP_SUGGESTIONS: Record<string, Suggestion[]> = {
+  gmail: [
+    { title: "Summarize my unread emails", app: "gmail" },
+    { title: "Find urgent emails I haven't replied to", app: "gmail" },
+  ],
+  whatsapp: [
+    { title: "Any WhatsApp messages I missed?", app: "whatsapp" },
+    { title: "Who messaged me most this week?", app: "whatsapp" },
+  ],
+};
 
 export default function AgentPage() {
   const { user, isLoaded } = useCurrentUser();
@@ -30,27 +45,36 @@ export default function AgentPage() {
     messages,
     historyLoaded,
     isStreaming,
-    toolStatus,
+    toolRuns,
     send,
+    stop,
     newConversation,
   } = useAgentChat(user?.id);
-  const [input, setInput] = useState("");
-  const scrollRef = useRef<HTMLDivElement>(null);
 
-  const connectedApps = PROVIDERS.filter(
-    (provider) => statuses[provider.id]?.status === STATUS_CONNECTED,
+  const connectedApps = useMemo(
+    () =>
+      PROVIDERS.filter(
+        (provider) => statuses[provider.id]?.status === STATUS_CONNECTED,
+      ),
+    [statuses],
   );
-  const hasLiveSource = connectedApps.some((provider) => provider.hasLiveTools);
+  const liveApps = useMemo(
+    () => connectedApps.filter((provider) => provider.hasLiveTools),
+    [connectedApps],
+  );
 
-  // Keep the newest message in view while history loads and answers stream.
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [messages, toolStatus, historyLoaded]);
+  const suggestions = useMemo(() => {
+    const appSpecific = liveApps.flatMap(
+      (provider) => APP_SUGGESTIONS[provider.id] ?? [],
+    );
+    return [...appSpecific, ...BASE_SUGGESTIONS].slice(0, 6);
+  }, [liveApps]);
+
+  const { ref, isPinned, onScroll, scrollToBottom } =
+    useStickToBottom<HTMLDivElement>([messages, toolRuns, historyLoaded]);
 
   const submit = (text: string) => {
     if (isStreaming) return;
-    setInput("");
     void send(text);
   };
 
@@ -60,8 +84,10 @@ export default function AgentPage() {
       ? lastMessage.suggestions
       : [];
 
+  const loading = !isLoaded || (Boolean(user) && !historyLoaded);
+
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="flex h-full min-h-0 flex-col pb-6">
       <PageHeader
         title="AI Agent"
         description="Ask anything across your connected accounts."
@@ -78,17 +104,19 @@ export default function AgentPage() {
         }
       />
 
-      <RecentSummary
-        userId={user?.id}
-        enabled={Boolean(user) && hasLiveSource}
-      />
+      <RecentSummary userId={user?.id} enabled={Boolean(user) && liveApps.length > 0} />
 
-      <Card className="flex flex-1 flex-col">
+      <Card className="relative flex min-h-0 flex-1 flex-col">
         <div
-          ref={scrollRef}
-          className="no-scrollbar min-h-0 flex-1 space-y-4 overflow-y-auto pr-1"
+          ref={ref}
+          onScroll={onScroll}
+          role="log"
+          aria-live="polite"
+          aria-busy={isStreaming}
+          aria-label="Conversation"
+          className="no-scrollbar min-h-0 flex-1 space-y-5 overflow-y-auto pr-1"
         >
-          {!isLoaded || (user && !historyLoaded) ? (
+          {loading ? (
             <div className="space-y-3 pt-2">
               <div className="skeleton h-10 w-2/3 rounded-2xl" />
               <div className="skeleton ml-auto h-10 w-1/2 rounded-2xl" />
@@ -99,8 +127,8 @@ export default function AgentPage() {
               Sign in to chat with your agent.
             </p>
           ) : messages.length === 0 ? (
-            <div className="flex h-full min-h-[38vh] flex-col items-center justify-center gap-4 text-center">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-r from-violet-500 to-blue-500 text-lg text-white shadow-lg shadow-violet-500/25">
+            <div className="flex h-full min-h-[38vh] flex-col items-center justify-center gap-5 py-14 text-center">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-blue-500 text-lg text-white shadow-lg shadow-violet-500/25">
                 ✦
               </div>
               <div>
@@ -108,11 +136,13 @@ export default function AgentPage() {
                   Hi! I&apos;m Aster.
                 </p>
                 <p className="mt-1 max-w-sm text-sm text-zinc-500 dark:text-zinc-400">
-                  Ask about your email, chats, or day — I pull live data from
-                  your connected apps before answering.
+                  {liveApps.length > 0
+                    ? "Ask about your email, chats, or day — I pull live data from your connected apps before answering."
+                    : "Ask me anything. Connect an app to let me pull in your real email and chats."}
                 </p>
               </div>
-              {connectedApps.length > 0 && (
+
+              {connectedApps.length > 0 ? (
                 <div className="flex items-center gap-2 text-xs text-zinc-400 dark:text-zinc-500">
                   <span>Connected:</span>
                   {connectedApps.map((provider) => (
@@ -123,12 +153,16 @@ export default function AgentPage() {
                     />
                   ))}
                 </div>
+              ) : (
+                <Link
+                  href="/integrations"
+                  className="text-xs font-medium text-violet-600 underline underline-offset-2 dark:text-violet-400"
+                >
+                  Connect an app to get live answers
+                </Link>
               )}
-              <SuggestionChips
-                items={STARTER_CHIPS}
-                onSelect={submit}
-                className="max-w-lg justify-center"
-              />
+
+              <SuggestionCards items={suggestions} onSelect={submit} />
             </div>
           ) : (
             <>
@@ -136,47 +170,40 @@ export default function AgentPage() {
                 <ChatMessage
                   key={message.id}
                   message={message}
-                  toolStatus={index === messages.length - 1 ? toolStatus : null}
+                  toolRuns={
+                    index === messages.length - 1 && isStreaming ? toolRuns : []
+                  }
                 />
               ))}
               {quickReplies.length > 0 && (
                 <SuggestionChips
                   items={quickReplies}
                   onSelect={submit}
-                  className="pl-1"
+                  className="pl-[38px]"
                 />
               )}
             </>
           )}
         </div>
 
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            submit(input);
-          }}
-          className="mt-4 flex items-center gap-2 rounded-xl border border-zinc-200 p-2 pl-4 dark:border-white/10"
-        >
-          <input
-            type="text"
-            value={input}
-            onChange={(event) => setInput(event.target.value)}
-            placeholder={
-              isStreaming ? "Aster is answering..." : "Ask Aster anything..."
-            }
-            disabled={!user}
-            maxLength={4000}
-            className="flex-1 bg-transparent text-sm text-zinc-900 outline-none placeholder:text-zinc-400 disabled:cursor-not-allowed dark:text-white dark:placeholder:text-zinc-500"
-          />
+        {/* Only offered when the pin is released, i.e. the user scrolled up. */}
+        {!isPinned && messages.length > 0 && (
           <button
-            type="submit"
-            aria-label="Send message"
-            disabled={!user || isStreaming || !input.trim()}
-            className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-r from-violet-500 to-blue-500 text-white shadow-lg shadow-violet-500/25 transition-opacity hover:opacity-85 disabled:cursor-not-allowed disabled:opacity-40"
+            type="button"
+            onClick={() => scrollToBottom()}
+            aria-label="Scroll to latest"
+            className="absolute bottom-28 left-1/2 flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-600 shadow-md transition-colors hover:bg-zinc-50 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
           >
-            <HugeiconsIcon icon={SentIcon} size={17} strokeWidth={1.8} />
+            <HugeiconsIcon icon={ArrowDown01Icon} size={16} strokeWidth={2} />
           </button>
-        </form>
+        )}
+
+        <Composer
+          disabled={!user}
+          isStreaming={isStreaming}
+          onSend={submit}
+          onStop={stop}
+        />
       </Card>
     </div>
   );

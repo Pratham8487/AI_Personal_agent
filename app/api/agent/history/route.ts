@@ -1,3 +1,4 @@
+import type { AgentMessagePayload } from "@/lib/agent-protocol";
 import {
   getActiveConversationId,
   listMessages,
@@ -5,7 +6,12 @@ import {
 } from "@/lib/server/agent/store";
 import { getSessionUser, unauthorized } from "@/lib/server/session";
 
-/** POST → today's conversation (if any) with its messages. */
+/**
+ * POST → today's conversation (if any) with its messages.
+ *
+ * Pruning happens here rather than mid-chat: this is the first call the page
+ * makes, so expired transcripts are gone before anything can read them.
+ */
 export async function POST() {
   const user = await getSessionUser();
   if (!user) return unauthorized();
@@ -16,18 +22,16 @@ export async function POST() {
     if (!conversationId) {
       return Response.json({ conversationId: null, messages: [] });
     }
-    const messages = await listMessages(conversationId);
-    return Response.json({
-      conversationId,
-      messages: messages.map((row) => ({
-        id: row.id,
-        role: row.role,
-        content: row.content,
-        apps: row.apps,
-        suggestions: row.suggestions,
-        createdAt: row.created_at,
-      })),
-    });
+    const rows = await listMessages(conversationId);
+    const messages: AgentMessagePayload[] = rows.map((row) => ({
+      id: row.id,
+      role: row.role,
+      content: row.content,
+      apps: row.apps,
+      suggestions: row.suggestions,
+      createdAt: row.created_at,
+    }));
+    return Response.json({ conversationId, messages });
   } catch (error) {
     console.error("Agent history failed:", error);
     return Response.json(
