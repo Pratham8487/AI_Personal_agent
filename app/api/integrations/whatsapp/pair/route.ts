@@ -1,4 +1,4 @@
-import { normalizePhone } from "@/lib/server/phone-auth";
+import { normalizePhone } from "@/lib/server/phone";
 import { getSessionUser, unauthorized } from "@/lib/server/session";
 import {
   WhatsAppAlreadyLinkedError,

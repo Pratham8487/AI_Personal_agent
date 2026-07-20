@@ -66,9 +66,9 @@ async function main() {
   check("new user starts unverified", userRow.rows[0].email_verified === false);
 
   // --- email verification via OTP row --------------------------------------
-  // AUTH_DEV_LOG_OTP prints codes to the server console; for automation we
-  // reconstruct nothing — instead verify the row exists, then exercise the
-  // wrong-code path and consume attempts.
+  // Codes only go out by email; for automation we reconstruct nothing —
+  // instead verify the row exists, then exercise the wrong-code path and
+  // consume attempts.
   const otpRow = await client.query(
     `SELECT otp_type, active, attempt_count FROM user_otp_verifications
      WHERE target = $1 AND otp_type = 'EMAIL_VERIFICATION' AND active`,

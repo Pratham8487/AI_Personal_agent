@@ -13,8 +13,6 @@ import AuthCard from "./auth-card";
 import AuthDivider from "./auth-divider";
 import FormError from "./form-error";
 import GoogleButton from "./google-button";
-import PhoneAuthForm from "./phone-auth-form";
-import PhoneButton from "./phone-button";
 import SubmitButton from "./submit-button";
 import TextField from "./text-field";
 import VerifyEmailForm from "./verify-email-form";
@@ -26,7 +24,6 @@ export default function SignUpForm() {
   const [password, setPassword] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [phoneMode, setPhoneMode] = useState(false);
   const [verifyEmailFor, setVerifyEmailFor] = useState<string | null>(null);
 
   async function handleSubmit(event: React.FormEvent) {
@@ -64,10 +61,6 @@ export default function SignUpForm() {
     signInWithGoogle(); // full-page redirect
   }
 
-  if (phoneMode) {
-    return <PhoneAuthForm collectName onBack={() => setPhoneMode(false)} />;
-  }
-
   if (verifyEmailFor) {
     return (
       <AuthCard
@@ -95,10 +88,7 @@ export default function SignUpForm() {
         </>
       }
     >
-      <div className="flex flex-col gap-3">
-        <GoogleButton onClick={handleGoogle} pending={pending} />
-        <PhoneButton onClick={() => setPhoneMode(true)} pending={pending} />
-      </div>
+      <GoogleButton onClick={handleGoogle} pending={pending} />
       <AuthDivider />
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <FormError message={error} />

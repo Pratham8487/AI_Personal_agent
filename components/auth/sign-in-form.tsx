@@ -8,8 +8,6 @@ import AuthCard from "./auth-card";
 import AuthDivider from "./auth-divider";
 import FormError from "./form-error";
 import GoogleButton from "./google-button";
-import PhoneAuthForm from "./phone-auth-form";
-import PhoneButton from "./phone-button";
 import SubmitButton from "./submit-button";
 import TextField from "./text-field";
 
@@ -29,7 +27,6 @@ export default function SignInForm() {
   const [password, setPassword] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(googleCallbackError);
-  const [phoneMode, setPhoneMode] = useState(false);
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -59,10 +56,6 @@ export default function SignInForm() {
     signInWithGoogle(); // full-page redirect
   }
 
-  if (phoneMode) {
-    return <PhoneAuthForm onBack={() => setPhoneMode(false)} />;
-  }
-
   return (
     <AuthCard
       title="Welcome back"
@@ -79,10 +72,7 @@ export default function SignInForm() {
         </>
       }
     >
-      <div className="flex flex-col gap-3">
-        <GoogleButton onClick={handleGoogle} pending={pending} />
-        <PhoneButton onClick={() => setPhoneMode(true)} pending={pending} />
-      </div>
+      <GoogleButton onClick={handleGoogle} pending={pending} />
       <AuthDivider />
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <FormError message={error} />

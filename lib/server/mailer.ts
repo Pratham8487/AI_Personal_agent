@@ -43,12 +43,6 @@ export async function sendOtpEmail(
   otp: string,
   purpose: EmailOtpPurpose
 ): Promise<void> {
-  // Dev fallback: no SMTP configured — print the code to the server console
-  // so the flows are fully testable locally.
-  if (!mailerConfigured() && process.env.NODE_ENV !== "production" && process.env.AUTH_DEV_LOG_OTP === "1") {
-    console.log(`[AUTH_DEV_LOG_OTP] ${purpose} code for ${to}: ${otp}`);
-    return;
-  }
   const { subject, intro } = COPY[purpose];
   await getTransport().sendMail({
     from: `Aster <${SMTP_USER}>`,

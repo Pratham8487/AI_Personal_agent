@@ -8,11 +8,7 @@ export const OTP_TTL_MINUTES = 5;
 export const OTP_RESEND_SECONDS = 60;
 export const OTP_MAX_ATTEMPTS = 5;
 
-export type OtpType =
-  | "EMAIL_VERIFICATION"
-  | "LOGIN"
-  | "PASSWORD_RESET"
-  | "PHONE_VERIFICATION";
+export type OtpType = "EMAIL_VERIFICATION" | "LOGIN" | "PASSWORD_RESET";
 
 export function generateOtp(): string {
   return randomInt(0, 1_000_000).toString().padStart(6, "0");
