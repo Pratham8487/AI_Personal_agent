@@ -1,4 +1,5 @@
 /* Temporary end-to-end verification of the access/refresh token + OTP system. */
+import { createHmac } from "crypto";
 import { Client } from "pg";
 
 const BASE = process.env.VERIFY_BASE ?? "http://localhost:3000";
@@ -169,7 +170,9 @@ async function main() {
   check("disabled account sign-in gets 403", signInDisabled.status === 403);
   await client.query(`UPDATE users SET active = true WHERE id = $1`, [userId]);
 
-  // --- sign-in / sign-out round trip ----------------------------------------
+  // --- sign-in (2FA) / sign-out round trip ------------------------------------
+  // Sign-in is now the first of two legs: a correct password only mails a
+  // LOGIN code. The session is issued by /api/auth/verify-otp.
   const jar2: Jar = {};
   const signIn = await fetch(`${BASE}/api/auth/sign-in`, {
     method: "POST",
@@ -177,7 +180,58 @@ async function main() {
     body: JSON.stringify({ email: EMAIL, password: PASSWORD }),
   });
   absorb(signIn, jar2);
-  check("sign-in issues fresh pair", signIn.status === 200 && !!jar2.access && !!jar2.refresh);
+  const signInBody = (await signIn.json()) as { otpRequired?: boolean };
+  check(
+    "sign-in returns otpRequired without a session",
+    signIn.status === 200 && signInBody.otpRequired === true && !jar2.access && !jar2.refresh
+  );
+
+  // Recover the mailed code from its stored HMAC — the plaintext is never persisted.
+  const loginOtpRow = await client.query(
+    `SELECT otp_hash FROM user_otp_verifications
+     WHERE otp_type = 'LOGIN' AND target = $1 AND active
+     ORDER BY created_at DESC LIMIT 1`,
+    [EMAIL]
+  );
+  check("LOGIN otp row stored", loginOtpRow.rowCount === 1);
+  const secret = process.env.PHONE_AUTH_SECRET!;
+  let loginOtp = "";
+  for (let i = 0; i < 1_000_000; i++) {
+    const candidate = i.toString().padStart(6, "0");
+    const h = createHmac("sha256", secret)
+      .update(`otp:LOGIN:${EMAIL}:${candidate}`)
+      .digest("hex");
+    if (h === loginOtpRow.rows[0].otp_hash) {
+      loginOtp = candidate;
+      break;
+    }
+  }
+  check("login otp recovered from hash", loginOtp !== "");
+
+  const badOtp = await fetch(`${BASE}/api/auth/verify-otp`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: EMAIL, otp: loginOtp === "000000" ? "000001" : "000000" }),
+  });
+  check("wrong login otp rejected", badOtp.status === 400);
+
+  const verified = await fetch(`${BASE}/api/auth/verify-otp`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: EMAIL, otp: loginOtp }),
+  });
+  absorb(verified, jar2);
+  check(
+    "verify-otp issues fresh pair",
+    verified.status === 200 && !!jar2.access && !!jar2.refresh
+  );
+
+  const loginReplay = await fetch(`${BASE}/api/auth/verify-otp`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: EMAIL, otp: loginOtp }),
+  });
+  check("login otp is single-use", loginReplay.status === 400);
   const signOut = await fetch(`${BASE}/api/auth/sign-out`, {
     method: "POST",
     headers: { cookie: cookieHeader(jar2) },

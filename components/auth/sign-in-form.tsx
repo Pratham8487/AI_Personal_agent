@@ -1,9 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { isValidEmail, signIn, signInWithGitHub, signInWithGoogle } from "@/lib/auth-client";
+import {
+  isValidEmail,
+  signIn,
+  signInWithGitHub,
+  signInWithGoogle,
+  verifyLoginOtp,
+} from "@/lib/auth-client";
 import AuthCard from "./auth-card";
 import AuthDivider from "./auth-divider";
 import FormError from "./form-error";
@@ -23,12 +29,25 @@ function oauthCallbackError(): string | null {
   return `${provider} sign-in failed. Please try again.`;
 }
 
+/** Mirrors OTP_RESEND_SECONDS on the server. */
+const RESEND_COOLDOWN_SECONDS = 60;
+
 export default function SignInForm() {
   const router = useRouter();
+  const [step, setStep] = useState<"credentials" | "otp">("credentials");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [otp, setOtp] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(oauthCallbackError);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [cooldown, setCooldown] = useState(0);
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = setInterval(() => setCooldown((s) => s - 1), 1000);
+    return () => clearInterval(timer);
+  }, [cooldown]);
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -44,13 +63,97 @@ export default function SignInForm() {
     }
 
     setPending(true);
-    const { user, error: signInError } = await signIn({ email, password });
-    if (!user) {
+    // A correct password only earns a mailed code — the session comes next.
+    const { otpRequired, error: signInError } = await signIn({ email, password });
+    setPending(false);
+    if (!otpRequired) {
       setError(signInError ?? "Unable to sign in. Please try again.");
+      return;
+    }
+    setStep("otp");
+    setCooldown(RESEND_COOLDOWN_SECONDS);
+  }
+
+  async function handleVerify(event: React.FormEvent) {
+    event.preventDefault();
+    setError(null);
+    setNotice(null);
+    setPending(true);
+    const { user, error: verifyError } = await verifyLoginOtp({ email, otp });
+    if (!user) {
+      setError(verifyError ?? "Verification failed. Please try again.");
       setPending(false);
       return;
     }
     router.replace("/");
+  }
+
+  /** Re-runs the password leg, which mails a fresh code. */
+  async function handleResend() {
+    if (cooldown > 0 || pending) return;
+    setError(null);
+    setNotice(null);
+    setPending(true);
+    const { otpRequired, error: resendError } = await signIn({ email, password });
+    setPending(false);
+    if (!otpRequired) {
+      setError(resendError ?? "Unable to resend the code. Please try again.");
+      return;
+    }
+    setOtp("");
+    setNotice("We sent a new code to your inbox.");
+    setCooldown(RESEND_COOLDOWN_SECONDS);
+  }
+
+  function backToCredentials() {
+    setStep("credentials");
+    setOtp("");
+    setPassword("");
+    setError(null);
+    setNotice(null);
+    setCooldown(0);
+  }
+
+  if (step === "otp") {
+    return (
+      <AuthCard title="Check your email" subtitle={`We sent a 6-digit code to ${email}`}>
+        <form onSubmit={handleVerify} className="flex flex-col gap-4">
+          <FormError message={error} />
+          {notice && (
+            <p className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3.5 py-2.5 text-sm text-emerald-700 dark:text-emerald-300">
+              {notice}
+            </p>
+          )}
+          <TextField
+            label="Sign-in code"
+            name="otp"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            placeholder="123456"
+            maxLength={6}
+            required
+            value={otp}
+            onChange={(event) => setOtp(event.target.value)}
+          />
+          <SubmitButton pending={pending}>Verify and sign in</SubmitButton>
+          <button
+            type="button"
+            onClick={handleResend}
+            disabled={pending || cooldown > 0}
+            className="text-sm font-medium text-zinc-500 transition-colors hover:text-zinc-900 disabled:opacity-60 dark:text-zinc-400 dark:hover:text-white"
+          >
+            {cooldown > 0 ? `Resend code in ${cooldown}s` : "Didn't get the email? Resend code"}
+          </button>
+          <button
+            type="button"
+            onClick={backToCredentials}
+            className="text-sm font-medium text-zinc-500 transition-colors hover:text-zinc-700 dark:hover:text-zinc-300"
+          >
+            ← Use a different account
+          </button>
+        </form>
+      </AuthCard>
+    );
   }
 
   function handleGoogle() {

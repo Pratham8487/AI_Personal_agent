@@ -42,3 +42,12 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local verification scratch: dev-server logs, curl cookie jars, headless
+# Chrome profiles/screenshots, and rendered email previews
+*.log
+jar*.txt
+cdata*/
+shot-*.png
+*-preview.html
+/public/_*.html

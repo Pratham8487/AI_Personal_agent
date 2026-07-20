@@ -90,8 +90,56 @@ export async function signUp(input: {
   }
 }
 
-export function signIn(input: { email: string; password: string }): Promise<AuthResult> {
-  return postJson("/api/auth/sign-in", input);
+export type SignInResult = {
+  /** True once the password checked out and a code is waiting in the inbox. */
+  otpRequired: boolean;
+  /** False when a still-live code was reused instead of mailing a new one. */
+  resent: boolean;
+  error: string | null;
+};
+
+/**
+ * First leg of sign-in. Never returns a user — a correct password only earns
+ * a mailed code. Follow with verifyLoginOtp() to get the session.
+ */
+export async function signIn(input: {
+  email: string;
+  password: string;
+}): Promise<SignInResult> {
+  try {
+    const res = await fetch("/api/auth/sign-in", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    const data = (await res.json().catch(() => ({}))) as {
+      otpRequired?: boolean;
+      resent?: boolean;
+      error?: string;
+    };
+    if (!res.ok) {
+      return {
+        otpRequired: false,
+        resent: false,
+        error: data.error ?? "Something went wrong. Please try again.",
+      };
+    }
+    return {
+      otpRequired: data.otpRequired ?? false,
+      resent: data.resent ?? false,
+      error: null,
+    };
+  } catch {
+    return { otpRequired: false, resent: false, error: "Network error. Please try again." };
+  }
+}
+
+/** Second leg of sign-in: exchanges the emailed code for a session. */
+export function verifyLoginOtp(input: {
+  email: string;
+  otp: string;
+}): Promise<AuthResult> {
+  return postJson("/api/auth/verify-otp", input);
 }
 
 export async function signOut(): Promise<void> {
