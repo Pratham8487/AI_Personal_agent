@@ -1,6 +1,5 @@
 import {
   AiBrain01Icon,
-  CreditCardIcon,
   DashboardSquare01Icon,
   News01Icon,
   Notification01Icon,
@@ -61,11 +60,3 @@ export const mainNavItems: NavItem[] = [
     iconBg: "bg-sky-500 shadow-lg shadow-sky-500/30",
   },
 ];
-
-export const bottomNavItem: NavItem = {
-  label: "Pricing Settings",
-  description: "Plan, billing, and usage",
-  href: "/pricing",
-  icon: CreditCardIcon,
-  iconBg: "bg-fuchsia-500 shadow-lg shadow-fuchsia-500/30",
-};

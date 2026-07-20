@@ -5,6 +5,7 @@ import Link from "next/link";
 import Badge from "@/components/dashboard/badge";
 import Card from "@/components/dashboard/card";
 import PageHeader from "@/components/dashboard/page-header";
+import PricingSettings from "@/components/dashboard/pricing-settings";
 import Select from "@/components/dashboard/select";
 import { updateProfile, userDisplayName } from "@/lib/auth-client";
 import { useCurrentUser } from "@/lib/use-current-user";
@@ -137,7 +138,7 @@ export default function SettingsPage() {
         title="Settings"
         description="Manage your account and preferences."
       />
-      <div className="grid gap-4 xl:grid-cols-2">
+      <div className="grid gap-4 xl:grid-cols-2 py-6">
         <Card title="Profile">
           {!isLoaded ? (
             <div className="flex items-center gap-4">
@@ -235,6 +236,7 @@ export default function SettingsPage() {
             ),
           )}
         </Card>
+        <PricingSettings />
       </div>
     </>
   );

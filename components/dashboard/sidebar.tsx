@@ -5,11 +5,14 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
+  Logout03Icon,
   SidebarLeft01Icon,
   SidebarRight01Icon,
   SparklesIcon,
 } from "@hugeicons/core-free-icons";
-import { bottomNavItem, mainNavItems, type NavItem } from "./nav-items";
+import { signOut } from "@/lib/auth-client";
+import { useCurrentUser } from "@/lib/use-current-user";
+import { mainNavItems, type NavItem } from "./nav-items";
 
 function Tooltip({
   label,
@@ -126,13 +129,51 @@ export default function Sidebar() {
         ))}
       </nav>
 
-      <div className="border-t border-zinc-200 p-3 dark:border-white/10">
-        <NavLink
-          item={bottomNavItem}
-          collapsed={collapsed}
-          active={isActive(bottomNavItem)}
-        />
-      </div>
+      <SignOutItem collapsed={collapsed} />
     </aside>
+  );
+}
+
+function SignOutItem({ collapsed }: { collapsed: boolean }) {
+  const { user } = useCurrentUser();
+  const [isSigningOut, setIsSigningOut] = useState(false);
+
+  if (!user) return null;
+
+  async function handleSignOut() {
+    setIsSigningOut(true);
+    await signOut();
+    // Full navigation so every client hook drops its cached user state.
+    window.location.assign("/sign-in");
+  }
+
+  return (
+    <div className="border-t border-zinc-200 p-3 dark:border-white/10">
+      <button
+        type="button"
+        onClick={handleSignOut}
+        disabled={isSigningOut}
+        className={`group relative flex w-full items-center gap-3 rounded-xl p-2 text-sm font-medium text-zinc-500 transition-all duration-200 hover:translate-x-0.5 hover:bg-rose-100 hover:text-rose-700 disabled:opacity-50 dark:text-zinc-400 dark:hover:bg-rose-500/15 dark:hover:text-rose-300 ${
+          collapsed ? "justify-center" : ""
+        }`}
+      >
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-rose-500 shadow-lg shadow-rose-500/30">
+          <HugeiconsIcon
+            icon={Logout03Icon}
+            size={17}
+            strokeWidth={1.8}
+            className="text-white"
+          />
+        </span>
+        {!collapsed && (
+          <span className="truncate">
+            {isSigningOut ? "Signing out…" : "Sign out"}
+          </span>
+        )}
+        {collapsed && (
+          <Tooltip label="Sign out" description="Sign out of your account" />
+        )}
+      </button>
+    </div>
   );
 }
