@@ -17,13 +17,28 @@ const gridClass = "grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";
  * OAuth callbacks bounce back here as
  * `?int_error=<code>&provider=<id>` — the browser is mid-redirect, so failures
  * arrive as a query string rather than a JSON response.
+ *
+ * A few codes read better with the provider's name in them, so those are
+ * functions of the provider id rather than fixed strings.
  */
-const REDIRECT_ERRORS: Record<string, string> = {
-  access_denied: "Google access was denied. Try connecting again.",
-  invalid_state: "The sign-in attempt could not be verified. Please retry.",
-  exchange_failed: "The connection failed. Please retry.",
-  not_configured:
-    "Google is not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env.local.",
+const REDIRECT_ERRORS: Record<string, (name: string) => string> = {
+  access_denied: (name) => `${name} access was denied. Try connecting again.`,
+  invalid_state: () =>
+    "The sign-in attempt could not be verified. Please retry.",
+  exchange_failed: () => "The connection failed. Please retry.",
+  not_configured: (name) =>
+    `${name} is not configured. Add its client ID and secret to .env.local.`,
+
+  // Microsoft's Work IQ MCP servers refuse some accounts outright. No retry can
+  // fix these, so each says exactly what the account is missing.
+  work_account_required: () =>
+    "Outlook needs a Microsoft 365 work or school account. Personal Microsoft accounts aren't supported by Microsoft's Work IQ MCP servers.",
+  copilot_license_required: () =>
+    "This account needs a Microsoft 365 Copilot license to use Microsoft's Work IQ MCP servers.",
+  admin_consent_required: () =>
+    "A Microsoft 365 administrator has to grant this app consent before Outlook can connect.",
+  work_iq_disabled: () =>
+    "Work IQ isn't enabled in this Microsoft 365 tenant. An administrator has to turn it on.",
 };
 
 const GENERIC_REDIRECT_ERROR = "The connection failed. Please retry.";
@@ -52,9 +67,11 @@ export default function IntegrationsPage() {
     const code = params.get("int_error");
     const provider = params.get("provider");
     if (code && provider) {
+      const name =
+        PROVIDERS.find((entry) => entry.id === provider)?.name ?? "The app";
       setRedirectError({
         provider,
-        message: REDIRECT_ERRORS[code] ?? GENERIC_REDIRECT_ERROR,
+        message: REDIRECT_ERRORS[code]?.(name) ?? GENERIC_REDIRECT_ERROR,
       });
     }
     if (code || params.get("connected")) {

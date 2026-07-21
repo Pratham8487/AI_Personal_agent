@@ -68,7 +68,7 @@ export const PROVIDERS: Provider[] = [
     description: "Work email and calendar, digested every morning.",
     Icon: OutlookIcon,
     brandClass: "text-[#0078D4]",
-    hasLiveTools: false,
+    hasLiveTools: true,
   },
   {
     id: "discord",

@@ -4,6 +4,7 @@ import {
   callCalendarTool,
   listCalendarTools,
 } from "@/lib/server/google-calendar-mcp";
+import { callOutlookTool, listOutlookTools } from "@/lib/server/outlook-mcp";
 import { WHATSAPP_MCP_TOOLS, callWhatsappTool } from "@/lib/server/whatsapp-mcp";
 
 /**
@@ -26,7 +27,9 @@ export type McpToolDefinition = {
 
 type LiveProvider = {
   id: string;
-  catalog: () => Promise<readonly McpToolDefinition[]>;
+  /** Takes the user because some catalogs are per-account (Outlook's is
+   *  per-Microsoft-tenant); providers with a fixed catalog just ignore it. */
+  catalog: (userId: string) => Promise<readonly McpToolDefinition[]>;
   call: (
     userId: string,
     tool: string,
@@ -40,6 +43,11 @@ const LIVE_PROVIDERS: readonly LiveProvider[] = [
     id: "google-calendar",
     catalog: listCalendarTools,
     call: callCalendarTool,
+  },
+  {
+    id: "outlook",
+    catalog: listOutlookTools,
+    call: callOutlookTool,
   },
   {
     id: "whatsapp",
@@ -77,6 +85,7 @@ export async function connectedProviders(userId: string): Promise<string[]> {
  * user's apps stay usable.
  */
 export async function buildAgentTools(
+  userId: string,
   providers: string[],
 ): Promise<AgentTool[]> {
   const connected = LIVE_PROVIDERS.filter((provider) =>
@@ -85,7 +94,7 @@ export async function buildAgentTools(
   const catalogs = await Promise.all(
     connected.map(async (provider) => {
       try {
-        return await provider.catalog();
+        return await provider.catalog(userId);
       } catch (error) {
         console.error(`Tool catalog unavailable (${provider.id}):`, error);
         return [];

@@ -271,7 +271,7 @@ export async function runAgentChat(options: {
   await saveMessage(conversationId, userId, "user", message);
 
   const providers = await connectedProviders(userId);
-  const tools = await buildAgentTools(providers);
+  const tools = await buildAgentTools(userId, providers);
   const liveApps = [...new Set(tools.map((tool) => tool.provider))];
 
   const messages: WireMessage[] = [

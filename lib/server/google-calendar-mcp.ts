@@ -6,6 +6,12 @@ import {
   GoogleNotConnectedError,
   getValidAccessToken,
 } from "./google-oauth";
+import {
+  McpTransportError,
+  postJsonRpc,
+  type JsonRpcResponse,
+  type McpToolDefinition,
+} from "./mcp-http";
 
 /**
  * Client for Google's official Calendar MCP server.
@@ -48,78 +54,32 @@ export class CalendarMcpError extends Error {
   }
 }
 
-export type McpToolDefinition = {
-  name: string;
-  description: string;
-  inputSchema: Record<string, unknown>;
-  annotations?: Record<string, unknown>;
-};
-
-type JsonRpcResponse = {
-  result?: {
-    tools?: McpToolDefinition[];
-    content?: { type: string; text?: string }[];
-    structuredContent?: Record<string, unknown>;
-    isError?: boolean;
-  };
-  error?: { message?: string };
-};
-
-/**
- * Google answers with either application/json or an SSE stream, depending on
- * the tool. For SSE, the last `data:` frame carries the JSON-RPC response.
- */
-async function readJsonRpc(res: Response): Promise<JsonRpcResponse> {
-  const body = await res.text();
-  const contentType = res.headers.get("content-type") ?? "";
-
-  if (contentType.includes("text/event-stream")) {
-    let last: JsonRpcResponse | null = null;
-    for (const line of body.split(/\r?\n/)) {
-      if (!line.startsWith("data:")) continue;
-      const payload = line.slice(5).trim();
-      if (!payload || payload === "[DONE]") continue;
-      try {
-        last = JSON.parse(payload) as JsonRpcResponse;
-      } catch {
-        // Ignore keep-alive or partial frames.
-      }
-    }
-    if (!last) throw new CalendarMcpError("Malformed response from Google Calendar.");
-    return last;
-  }
-
-  try {
-    return JSON.parse(body) as JsonRpcResponse;
-  } catch {
-    throw new CalendarMcpError("Malformed response from Google Calendar.");
-  }
-}
+export type { McpToolDefinition };
 
 async function post(
   message: Record<string, unknown>,
   accessToken?: string,
 ): Promise<JsonRpcResponse> {
-  const res = await fetch(ENDPOINT, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json, text/event-stream",
-      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-    },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, ...message }),
-  });
-
-  // Auth failures still carry a JSON-RPC body, so parse before branching.
-  if (res.status === 401 || res.status === 403) {
-    throw new GoogleNotConnectedError(
-      "Google Calendar access has expired. Reconnect it from the Integrations page.",
-    );
+  try {
+    const { response } = await postJsonRpc({
+      endpoint: ENDPOINT,
+      message,
+      accessToken,
+      label: "Google Calendar",
+      onUnauthorized: () =>
+        new GoogleNotConnectedError(
+          "Google Calendar access has expired. Reconnect it from the Integrations page.",
+        ),
+    });
+    return response;
+  } catch (error) {
+    // Keep CalendarMcpError as this module's only transport-failure type, so
+    // callers' instanceof checks stay exhaustive.
+    if (error instanceof McpTransportError) {
+      throw new CalendarMcpError(error.message);
+    }
+    throw error;
   }
-  if (!res.ok && res.status >= 500) {
-    throw new CalendarMcpError("Google Calendar is unavailable. Please retry.");
-  }
-  return readJsonRpc(res);
 }
 
 let catalog: { tools: McpToolDefinition[]; fetchedAt: number } | null = null;

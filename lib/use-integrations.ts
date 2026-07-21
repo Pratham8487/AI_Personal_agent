@@ -21,10 +21,10 @@ const SAVE_ERROR = "Could not save your connection. Please retry.";
  * server-side and flips the DB status; the auth route derives the user from
  * the session cookie.
  */
-const OAUTH_PROVIDERS = ["gmail", "google-calendar"];
+const OAUTH_PROVIDERS = ["gmail", "google-calendar", "outlook"];
 
 /** Providers whose disconnect tears down server-side state (tokens, sockets). */
-const MANAGED_DISCONNECT = ["gmail", "google-calendar", "whatsapp"];
+const MANAGED_DISCONNECT = ["gmail", "google-calendar", "outlook", "whatsapp"];
 
 /**
  * Statuses per user, kept across page navigations so returning to a page

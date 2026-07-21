@@ -10,6 +10,7 @@
     "trigger:dev": "npx trigger.dev@latest dev",
     "trigger:deploy": "npx trigger.dev@latest deploy",
     "db:migrate": "node --env-file=.env.local --import tsx scripts/db-migrate.ts",
+    "verify:outlook": "node --env-file=.env.local --import tsx scripts/verify-outlook.ts",
     "db:import-insforge": "node --env-file=.env.local --import tsx scripts/migrate-from-insforge.ts"
   },
   "dependencies": {

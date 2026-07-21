@@ -7,7 +7,7 @@ import {
   primaryButtonClass,
   secondaryButtonClass,
 } from "./form-classes";
-import type { JsonSchema, McpResult, McpTool } from "@/lib/calendar-mcp-client";
+import type { JsonSchema, McpResult, McpTool } from "@/lib/mcp-types";
 import { toolTitle } from "@/lib/tool-title";
 
 /**
@@ -388,7 +388,7 @@ export default function McpToolRunner({
             {confirming ? (
               <>
                 <span className="text-xs text-zinc-600 dark:text-zinc-300">
-                  This permanently changes your calendar.
+                  This change cannot be undone.
                 </span>
                 <button
                   type="button"
