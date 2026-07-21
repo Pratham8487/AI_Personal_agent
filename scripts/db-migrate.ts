@@ -8,9 +8,32 @@ const DB = process.env.POSTGRES_DB ?? "Personal_assistant_db";
 const USER = process.env.POSTGRES_USER ?? "postgres";
 const PASSWORD = process.env.POSTGRES_PASSWORD;
 
+// Mirrors lib/server/db.ts: a connection string means hosted Postgres (TLS
+// required, database already provisioned), its absence means local/VM.
+const CONNECTION_STRING =
+  process.env.DATABASE_URL ?? process.env.POSTGRES_URL ?? null;
+const SSL =
+  process.env.POSTGRES_SSL_NO_VERIFY === "true"
+    ? { rejectUnauthorized: false }
+    : true;
+
+/** Connection config for the app's own database. */
+function targetConfig() {
+  return CONNECTION_STRING
+    ? { connectionString: CONNECTION_STRING, ssl: SSL }
+    : { host: HOST, port: PORT, user: USER, password: PASSWORD, database: DB };
+}
+
 const MIGRATIONS_DIR = join(process.cwd(), "db", "migrations");
 
 async function ensureDatabase(): Promise<void> {
+  // Hosted providers create the database for you and refuse both the
+  // `postgres` maintenance database and CREATE DATABASE, so there is
+  // nothing to do — and attempting it fails the whole migration run.
+  if (CONNECTION_STRING) {
+    console.log("Connection string set — assuming the database exists.");
+    return;
+  }
   const client = new Client({
     host: HOST,
     port: PORT,
@@ -35,13 +58,7 @@ async function ensureDatabase(): Promise<void> {
 }
 
 async function applyMigrations(): Promise<void> {
-  const client = new Client({
-    host: HOST,
-    port: PORT,
-    user: USER,
-    password: PASSWORD,
-    database: DB,
-  });
+  const client = new Client(targetConfig());
   await client.connect();
   try {
     await client.query(
