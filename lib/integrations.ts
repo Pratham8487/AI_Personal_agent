@@ -44,7 +44,7 @@ export const PROVIDERS: Provider[] = [
     description: "Meetings pulled into your daily briefing.",
     Icon: CalendarIcon,
     brandClass: "text-[#4285F4]",
-    hasLiveTools: false,
+    hasLiveTools: true,
   },
   {
     id: "whatsapp",
@@ -52,7 +52,7 @@ export const PROVIDERS: Provider[] = [
     description: "Group-chat recaps and commitments turned into reminders.",
     Icon: WhatsAppIcon,
     brandClass: "text-[#25D366]",
-    hasLiveTools: true,
+    hasLiveTools: false,
   },
   {
     id: "slack",

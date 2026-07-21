@@ -39,9 +39,13 @@ export async function PUT(request: Request) {
   if (!provider || !/^[a-z0-9_-]{1,40}$/.test(provider)) {
     return Response.json({ error: "Invalid provider." }, { status: 400 });
   }
-  // Gmail and WhatsApp have dedicated connect/disconnect flows that manage
-  // server-side state (tokens, sockets); they cannot be toggled directly.
-  if (provider === "gmail" || provider === "whatsapp") {
+  // Gmail, Calendar and WhatsApp have dedicated connect/disconnect flows that
+  // manage server-side state (tokens, sockets); no direct toggling.
+  if (
+    provider === "gmail" ||
+    provider === "google-calendar" ||
+    provider === "whatsapp"
+  ) {
     return Response.json(
       { error: `${provider} is managed by its own connect flow.` },
       { status: 400 }

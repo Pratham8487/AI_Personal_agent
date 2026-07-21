@@ -87,7 +87,7 @@ export default function AgentPage() {
   const loading = !isLoaded || (Boolean(user) && !historyLoaded);
 
   return (
-    <div className="flex h-full min-h-0 flex-col pb-6">
+    <div className="flex h-full min-h-0 flex-col pb-0">
       <PageHeader
         title="AI Agent"
         description="Ask anything across your connected accounts."

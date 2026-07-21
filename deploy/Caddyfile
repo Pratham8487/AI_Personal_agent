@@ -1,0 +1,30 @@
+# Aster reverse proxy — install to /etc/caddy/Caddyfile
+#
+# Caddy provisions and renews the TLS cert automatically via Let's Encrypt.
+# Requirements: the A record for this name must already point at this VM, and
+# ports 80 + 443 must be reachable (OCI Security List *and* iptables).
+
+aster.prathamshah.me {
+	encode zstd gzip
+
+	reverse_proxy 127.0.0.1:3000 {
+		# The agent chat streams NDJSON. Without this Caddy buffers the
+		# response and tokens arrive in one lump at the end of the turn.
+		flush_interval -1
+	}
+
+	# Deliberately NOT overriding Host here. OAuth redirect URIs are derived
+	# from `new URL(request.url).origin` in the route handlers, never from an
+	# env var — so the upstream must see the public hostname. Caddy passes the
+	# original Host through untouched and sets X-Forwarded-{For,Proto,Host}
+	# automatically. Rewriting Host to the upstream address (the nginx habit)
+	# would make the app build redirect_uri as http://127.0.0.1:3000/... and
+	# Google/GitHub would reject every sign-in.
+
+	log {
+		output file /var/log/caddy/aster.log {
+			roll_size 10MiB
+			roll_keep 5
+		}
+	}
+}

@@ -48,7 +48,7 @@ export default function BriefingPage() {
   }, [defaultConfig, briefings]);
 
   return (
-    <>
+    <div className="space-y-8">
       <PageHeader
         title="Briefing"
         description={
@@ -84,7 +84,7 @@ export default function BriefingPage() {
       ) : !hasLiveSource ? (
         <GmailConnectCard variant="connect" className="mx-auto max-w-md" />
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-4 pb-4">
           <TopBriefCard
             status={briefings.status}
             briefing={data?.today ?? null}
@@ -141,6 +141,6 @@ export default function BriefingPage() {
       )}
 
       <Toast message={briefings.limitNotice} />
-    </>
+    </div>
   );
 }

@@ -14,9 +14,12 @@ export async function GET(request: Request) {
   }
   if (!gmailOauthConfigured()) {
     return Response.redirect(
-      new URL("/integrations?gmail_error=not_configured", request.url),
+      new URL(
+        "/integrations?int_error=not_configured&provider=gmail",
+        request.url,
+      ),
       302,
     );
   }
-  return Response.redirect(buildAuthUrl(user.id, url.origin), 302);
+  return Response.redirect(await buildAuthUrl(user.id, url.origin), 302);
 }

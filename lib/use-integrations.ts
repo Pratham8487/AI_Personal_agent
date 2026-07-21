@@ -16,6 +16,17 @@ type ErrorMap = Record<string, string | null>;
 const SAVE_ERROR = "Could not save your connection. Please retry.";
 
 /**
+ * Providers that connect by leaving the app for an OAuth consent screen. The
+ * flow finishes at /api/integrations/<id>/callback, which stores the tokens
+ * server-side and flips the DB status; the auth route derives the user from
+ * the session cookie.
+ */
+const OAUTH_PROVIDERS = ["gmail", "google-calendar"];
+
+/** Providers whose disconnect tears down server-side state (tokens, sockets). */
+const MANAGED_DISCONNECT = ["gmail", "google-calendar", "whatsapp"];
+
+/**
  * Statuses per user, kept across page navigations so returning to a page
  * paints instantly instead of refetching. Connect/disconnect update it; the
  * OAuth redirect fully reloads the app, which clears it and refetches.
@@ -113,12 +124,9 @@ export function useIntegrations(userId: string | undefined) {
   const connect = useCallback(
     async (providerId: string) => {
       if (!userId || pending[providerId]) return;
-      if (providerId === "gmail") {
-        // Google's consent flow finishes at /api/integrations/gmail/callback,
-        // which stores the tokens server-side and flips the DB status. The
-        // auth route derives the user from the session cookie.
-        setPending((prev) => ({ ...prev, gmail: true }));
-        window.location.assign("/api/integrations/gmail/auth");
+      if (OAUTH_PROVIDERS.includes(providerId)) {
+        setPending((prev) => ({ ...prev, [providerId]: true }));
+        window.location.assign(`/api/integrations/${providerId}/auth`);
         return;
       }
       // WhatsApp connects through the pairing dialog, not a status flip.
@@ -133,26 +141,19 @@ export function useIntegrations(userId: string | undefined) {
       if (!userId || pending[providerId]) return;
       const uid = userId;
       await run(providerId, async () => {
-        if (providerId === "gmail") {
-          const res = await apiFetch("/api/integrations/gmail/disconnect", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ userId: uid }),
-          });
-          if (!res.ok) throw new Error(`Gmail disconnect failed (${res.status})`);
-          applyStatus(uid, "gmail", "disconnected", null);
-          return;
-        }
-        if (providerId === "whatsapp") {
-          const res = await apiFetch("/api/integrations/whatsapp/disconnect", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ userId: uid }),
-          });
+        if (MANAGED_DISCONNECT.includes(providerId)) {
+          const res = await apiFetch(
+            `/api/integrations/${providerId}/disconnect`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ userId: uid }),
+            },
+          );
           if (!res.ok) {
-            throw new Error(`WhatsApp disconnect failed (${res.status})`);
+            throw new Error(`${providerId} disconnect failed (${res.status})`);
           }
-          applyStatus(uid, "whatsapp", "disconnected", null);
+          applyStatus(uid, providerId, "disconnected", null);
           return;
         }
         await setStatus(providerId, "disconnected");

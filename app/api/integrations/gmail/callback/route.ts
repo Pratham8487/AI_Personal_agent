@@ -9,18 +9,22 @@ function redirectToIntegrations(request: Request, query: string) {
   return Response.redirect(new URL(`/integrations${query}`, request.url), 302);
 }
 
+function failure(request: Request, code: string) {
+  return redirectToIntegrations(request, `?int_error=${code}&provider=gmail`);
+}
+
 /** Google redirects here after the user grants (or denies) Gmail access. */
 export async function GET(request: Request) {
   const params = new URL(request.url).searchParams;
 
   if (params.get("error")) {
-    return redirectToIntegrations(request, "?gmail_error=access_denied");
+    return failure(request, "access_denied");
   }
 
   const code = params.get("code");
   const userId = verifyState(params.get("state") ?? "");
   if (!code || !userId) {
-    return redirectToIntegrations(request, "?gmail_error=invalid_state");
+    return failure(request, "invalid_state");
   }
 
   try {
@@ -30,6 +34,6 @@ export async function GET(request: Request) {
     return redirectToIntegrations(request, "?connected=gmail");
   } catch (error) {
     console.error("Gmail OAuth callback failed:", error);
-    return redirectToIntegrations(request, "?gmail_error=exchange_failed");
+    return failure(request, "exchange_failed");
   }
 }

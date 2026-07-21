@@ -55,13 +55,13 @@ Connected apps: ${connected}. Live data tools are available for: ${hasTools ? li
 Rules:
 - ${
     hasTools
-      ? "For any question about the user's real emails, messages, contacts, or activity, call the tools to fetch live data BEFORE answering. Prefer small counts, and batch independent lookups into a single round."
-      : "No live data tools are available. Answer generally and suggest connecting Gmail or WhatsApp on the Integrations page for live answers."
+      ? "For any question about the user's real emails, messages, meetings, or activity, call the tools to fetch live data BEFORE answering. Prefer small counts, and batch independent lookups into a single round."
+      : "No live data tools are available. Answer generally and suggest connecting Gmail, Google Calendar or WhatsApp on the Integrations page for live answers."
   }
 - NEVER invent senders, messages, counts, times, or content. If a tool fails or returns nothing, say so plainly.
-- Ask before sending any email or message on the user's behalf unless they explicitly asked you to send it.
+- Ask before sending any email or message, or creating, changing or deleting any calendar event, unless the user explicitly asked for it.
 - Format answers in GitHub-flavored markdown: short headings, bullet lists, tables for structured comparisons, **bold** for key facts, fenced code blocks only for code.
-- Refer to apps by their plain names (Gmail, WhatsApp, Slack...).
+- Refer to apps by their plain names (Gmail, Google Calendar, WhatsApp, Slack...).
 - Be concise and action-oriented.`;
 }
 
@@ -271,7 +271,7 @@ export async function runAgentChat(options: {
   await saveMessage(conversationId, userId, "user", message);
 
   const providers = await connectedProviders(userId);
-  const tools = buildAgentTools(providers);
+  const tools = await buildAgentTools(providers);
   const liveApps = [...new Set(tools.map((tool) => tool.provider))];
 
   const messages: WireMessage[] = [

@@ -13,14 +13,20 @@ import { useIntegrations } from "@/lib/use-integrations";
 
 const gridClass = "grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";
 
-const GMAIL_REDIRECT_ERRORS: Record<string, string> = {
+/**
+ * OAuth callbacks bounce back here as
+ * `?int_error=<code>&provider=<id>` — the browser is mid-redirect, so failures
+ * arrive as a query string rather than a JSON response.
+ */
+const REDIRECT_ERRORS: Record<string, string> = {
   access_denied: "Google access was denied. Try connecting again.",
   invalid_state: "The sign-in attempt could not be verified. Please retry.",
-  invalid_user: "Sign in again before connecting Gmail.",
-  exchange_failed: "Google connection failed. Please retry.",
+  exchange_failed: "The connection failed. Please retry.",
   not_configured:
-    "Gmail is not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env.local.",
+    "Google is not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env.local.",
 };
+
+const GENERIC_REDIRECT_ERROR = "The connection failed. Please retry.";
 
 export default function IntegrationsPage() {
   const router = useRouter();
@@ -36,14 +42,21 @@ export default function IntegrationsPage() {
     setStatusLocal,
   } = useIntegrations(user?.id);
   const [whatsappPairing, setWhatsappPairing] = useState(false);
-  const [gmailRedirectError, setGmailRedirectError] = useState<string | null>(
-    null,
-  );
+  const [redirectError, setRedirectError] = useState<{
+    provider: string;
+    message: string;
+  } | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const code = params.get("gmail_error");
-    if (code) setGmailRedirectError(GMAIL_REDIRECT_ERRORS[code] ?? "Gmail connection failed.");
+    const code = params.get("int_error");
+    const provider = params.get("provider");
+    if (code && provider) {
+      setRedirectError({
+        provider,
+        message: REDIRECT_ERRORS[code] ?? GENERIC_REDIRECT_ERROR,
+      });
+    }
     if (code || params.get("connected")) {
       window.history.replaceState(null, "", window.location.pathname);
     }
@@ -97,9 +110,10 @@ export default function IntegrationsPage() {
               status={statuses[provider.id]?.status}
               pending={Boolean(pending[provider.id])}
               error={
-                provider.id === "gmail"
-                  ? (errors.gmail ?? gmailRedirectError)
-                  : errors[provider.id]
+                errors[provider.id] ??
+                (redirectError?.provider === provider.id
+                  ? redirectError.message
+                  : null)
               }
               onConnect={
                 provider.id === "whatsapp"

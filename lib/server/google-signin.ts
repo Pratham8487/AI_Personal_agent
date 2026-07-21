@@ -1,12 +1,28 @@
 /**
  * Google OAuth for SIGN-IN (openid email profile) — distinct from the Gmail
  * integration flow in gmail-oauth.ts, which requests Gmail scopes for an
- * already signed-in user. Same Google OAuth client, different redirect URI:
- *   <origin>/api/auth/google/callback   (register it in Google Cloud console)
+ * already signed-in user. Redirect URI (register it in Google Cloud console):
+ *   <origin>/api/auth/google/callback
+ *
+ * Use a SEPARATE OAuth client (ideally a separate Google Cloud project) for
+ * sign-in: only `openid email profile` are requested here, which are
+ * non-sensitive scopes, so an unverified client has no 100-user cap. Gmail's
+ * client asks for sensitive scopes, and until it passes verification its
+ * consent screen caps at 100 test users — sharing one client would drag
+ * sign-in under that same cap.
+ *
+ * GOOGLE_SIGNIN_CLIENT_ID/SECRET fall back to GOOGLE_CLIENT_ID/SECRET so a
+ * single-client setup keeps working; set them to split the two clients.
  */
 
-const CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
-const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
+// Resolved as a pair — never an id from one client with the other's secret.
+const SPLIT_CLIENT = Boolean(process.env.GOOGLE_SIGNIN_CLIENT_ID);
+const CLIENT_ID = SPLIT_CLIENT
+  ? process.env.GOOGLE_SIGNIN_CLIENT_ID
+  : process.env.GOOGLE_CLIENT_ID;
+const CLIENT_SECRET = SPLIT_CLIENT
+  ? process.env.GOOGLE_SIGNIN_CLIENT_SECRET
+  : process.env.GOOGLE_CLIENT_SECRET;
 
 const AUTH_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
@@ -24,7 +40,9 @@ export function signInRedirectUri(origin: string): string {
 }
 
 export function buildSignInUrl(origin: string, state: string): string {
-  if (!CLIENT_ID) throw new Error("GOOGLE_CLIENT_ID is not set.");
+  if (!CLIENT_ID) {
+    throw new Error("GOOGLE_SIGNIN_CLIENT_ID (or GOOGLE_CLIENT_ID) is not set.");
+  }
   const params = new URLSearchParams({
     client_id: CLIENT_ID,
     redirect_uri: signInRedirectUri(origin),
@@ -41,7 +59,9 @@ export async function exchangeSignInCode(
   origin: string
 ): Promise<{ access_token: string }> {
   if (!CLIENT_ID || !CLIENT_SECRET) {
-    throw new Error("GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be set.");
+    throw new Error(
+      "GOOGLE_SIGNIN_CLIENT_ID and GOOGLE_SIGNIN_CLIENT_SECRET (or the GOOGLE_CLIENT_* pair) must be set."
+    );
   }
   const res = await fetch(TOKEN_ENDPOINT, {
     method: "POST",

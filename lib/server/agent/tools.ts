@@ -1,5 +1,9 @@
 import { adminSql } from "@/lib/server/db";
 import { GMAIL_MCP_TOOLS, callGmailTool } from "@/lib/server/gmail-mcp";
+import {
+  callCalendarTool,
+  listCalendarTools,
+} from "@/lib/server/google-calendar-mcp";
 import { WHATSAPP_MCP_TOOLS, callWhatsappTool } from "@/lib/server/whatsapp-mcp";
 
 /**
@@ -10,6 +14,8 @@ import { WHATSAPP_MCP_TOOLS, callWhatsappTool } from "@/lib/server/whatsapp-mcp"
  *
  * To add a provider's live tools, add one LIVE_PROVIDERS entry — the tool
  * builder, dispatcher, and UI attribution all read from that single source.
+ * Catalogs are async because remote MCP servers (Google Calendar) are asked
+ * for theirs at runtime rather than shipping a hardcoded copy.
  */
 
 export type McpToolDefinition = {
@@ -20,7 +26,7 @@ export type McpToolDefinition = {
 
 type LiveProvider = {
   id: string;
-  catalog: readonly McpToolDefinition[];
+  catalog: () => Promise<readonly McpToolDefinition[]>;
   call: (
     userId: string,
     tool: string,
@@ -29,8 +35,17 @@ type LiveProvider = {
 };
 
 const LIVE_PROVIDERS: readonly LiveProvider[] = [
-  { id: "gmail", catalog: GMAIL_MCP_TOOLS, call: callGmailTool },
-  { id: "whatsapp", catalog: WHATSAPP_MCP_TOOLS, call: callWhatsappTool },
+  { id: "gmail", catalog: async () => GMAIL_MCP_TOOLS, call: callGmailTool },
+  {
+    id: "google-calendar",
+    catalog: listCalendarTools,
+    call: callCalendarTool,
+  },
+  {
+    id: "whatsapp",
+    catalog: async () => WHATSAPP_MCP_TOOLS,
+    call: callWhatsappTool,
+  },
 ];
 
 export type AgentTool = {
@@ -56,13 +71,31 @@ export async function connectedProviders(userId: string): Promise<string[]> {
   return rows.map((row) => row.provider);
 }
 
-/** Tools for the user's connected live providers only. */
-export function buildAgentTools(providers: string[]): AgentTool[] {
-  const connected = new Set(providers);
+/**
+ * Tools for the user's connected live providers only. A provider whose catalog
+ * cannot be reached is skipped rather than failing the turn — the rest of the
+ * user's apps stay usable.
+ */
+export async function buildAgentTools(
+  providers: string[],
+): Promise<AgentTool[]> {
+  const connected = LIVE_PROVIDERS.filter((provider) =>
+    new Set(providers).has(provider.id),
+  );
+  const catalogs = await Promise.all(
+    connected.map(async (provider) => {
+      try {
+        return await provider.catalog();
+      } catch (error) {
+        console.error(`Tool catalog unavailable (${provider.id}):`, error);
+        return [];
+      }
+    }),
+  );
+
   const tools: AgentTool[] = [];
-  for (const provider of LIVE_PROVIDERS) {
-    if (!connected.has(provider.id)) continue;
-    for (const tool of provider.catalog) {
+  connected.forEach((provider, index) => {
+    for (const tool of catalogs[index]) {
       tools.push({
         provider: provider.id,
         toolName: tool.name,
@@ -77,7 +110,7 @@ export function buildAgentTools(providers: string[]): AgentTool[] {
         },
       });
     }
-  }
+  });
   return tools;
 }
 
