@@ -186,7 +186,7 @@ export default function SettingsPage() {
             ),
           )}
         </Card>
-        <PricingSettings />
+        {/* <PricingSettings /> */}
       </div>
     </>
   );

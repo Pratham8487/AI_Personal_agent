@@ -26,7 +26,11 @@ function shortTime(iso: string): string {
     : date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-/** AI-ranked items that need the user first, with source app and urgency. */
+/**
+ * AI-ranked items that need the user first, with source app and urgency.
+ * The copy is overridable so /alerts can present the same items as alerts
+ * without a second copy of this markup.
+ */
 function PriorityItemsCard({
   status,
   items,
@@ -34,6 +38,9 @@ function PriorityItemsCard({
   notConfigured,
   onRetry,
   className = "",
+  title = "Priority Items",
+  subtitle = "What needs you first",
+  emptyMessage = "Nothing urgent right now. Nice work!",
 }: {
   status: BriefStatus;
   items: PriorityItem[];
@@ -41,13 +48,12 @@ function PriorityItemsCard({
   notConfigured: boolean;
   onRetry: () => void;
   className?: string;
+  title?: string;
+  subtitle?: string;
+  emptyMessage?: string;
 }) {
   return (
-    <Card
-      title="Priority Items"
-      subtitle="What needs you first"
-      className={className}
-    >
+    <Card title={title} subtitle={subtitle} className={className}>
       {status === "error" ? (
         <div>
           <p className="text-sm text-rose-500">
@@ -71,7 +77,7 @@ function PriorityItemsCard({
         </div>
       ) : items.length === 0 ? (
         <p className="text-sm text-zinc-500 dark:text-zinc-400">
-          Nothing urgent right now. Nice work!
+          {emptyMessage}
         </p>
       ) : (
         <ul className="space-y-4">

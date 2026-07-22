@@ -64,10 +64,12 @@ const COPY: Record<EmailOtpPurpose, Copy> = {
  * clients actually agree on. The <style> block only carries progressive
  * enhancements (dark mode, small-screen tweaks) that degrade to the inline
  * defaults wherever it gets stripped.
+ *
+ * The code itself is one contiguous text run with no letter-spacing and no
+ * inner markup — both break copy/paste (a trailing letter-space drops the last
+ * digit on drag-select; inner spans split the double-click word).
  */
 function renderOtpEmail(otp: string, copy: Copy): string {
-  // Grouped as 3+3 so the code stays readable when it wraps on narrow screens.
-  const spaced = `${otp.slice(0, 3)}<span style="letter-spacing:0">&#8202;</span>${otp.slice(3)}`;
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -79,7 +81,7 @@ function renderOtpEmail(otp: string, copy: Copy): string {
 <style>
   @media (max-width:480px){
     .card{padding:28px 22px!important}
-    .code{font-size:32px!important;letter-spacing:8px!important}
+    .code{font-size:30px!important}
   }
   @media (prefers-color-scheme:dark){
     body,.bg{background:#09090b!important}
@@ -112,7 +114,7 @@ function renderOtpEmail(otp: string, copy: Copy): string {
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
               <tr>
                 <td class="code-well" align="center" style="background:#fafafa;border:1px solid #e4e4e7;border-radius:12px;padding:22px 12px;">
-                  <div class="code" style="font-family:'SF Mono',SFMono-Regular,Menlo,Consolas,'Liberation Mono',monospace;font-size:38px;line-height:1.1;font-weight:600;letter-spacing:10px;text-indent:10px;color:#18181b;">${spaced}</div>
+                  <div class="code" style="font-family:'SF Mono',SFMono-Regular,Menlo,Consolas,'Liberation Mono',monospace;font-size:36px;line-height:1.2;font-weight:600;color:#18181b;-webkit-user-select:all;user-select:all;">${otp}</div>
                 </td>
               </tr>
             </table>
