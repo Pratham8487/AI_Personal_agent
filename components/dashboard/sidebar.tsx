@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -8,7 +9,6 @@ import {
   Logout03Icon,
   SidebarLeft01Icon,
   SidebarRight01Icon,
-  SparklesIcon,
 } from "@hugeicons/core-free-icons";
 import { signOut } from "@/lib/auth-client";
 import { useCurrentUser } from "@/lib/use-current-user";
@@ -91,9 +91,15 @@ export default function Sidebar() {
             : "h-16 items-center gap-2.5 px-4"
         }`}
       >
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500 to-fuchsia-500 shadow-lg shadow-violet-500/25">
-          <HugeiconsIcon icon={SparklesIcon} size={18} className="text-white" />
-        </span>
+        {/* Decorative: the adjacent "Aster" wordmark carries the name. */}
+        <Image
+          src="/logo.png"
+          alt=""
+          width={32}
+          height={32}
+          priority
+          className="h-8 w-8 shrink-0 rounded-lg shadow-lg shadow-violet-500/25"
+        />
         {!collapsed && (
           <span className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-white">
             Aster

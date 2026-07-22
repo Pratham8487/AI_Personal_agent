@@ -1,12 +1,18 @@
+import Image from "next/image";
 import Link from "next/link";
-import { SparklesIcon } from "./icons";
 
 export default function Logo({ className = "" }: { className?: string }) {
   return (
     <Link href="/" className={`flex items-center gap-2.5 ${className}`}>
-      <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500 to-fuchsia-500 shadow-lg shadow-violet-500/25">
-        <SparklesIcon className="h-4.5 w-4.5 text-white" />
-      </span>
+      {/* Decorative: the adjacent "Aster" wordmark carries the name. */}
+      <Image
+        src="/logo.png"
+        alt=""
+        width={32}
+        height={32}
+        priority
+        className="h-8 w-8 shrink-0 rounded-lg shadow-lg shadow-violet-500/25"
+      />
       <span className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-white">
         Aster
       </span>
