@@ -2,7 +2,6 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useCurrentUser } from "@/lib/use-current-user";
 
 // Landing page temporarily removed from this route — code preserved below.
 // import Cta from "@/components/landing/cta";
@@ -15,18 +14,16 @@ import { useCurrentUser } from "@/lib/use-current-user";
 // import Integrations from "@/components/landing/integrations";
 
 /**
- * Auth gate: `getCurrentUser()` silently restores the session from the
- * httpOnly refresh cookie when one exists; otherwise the visitor is sent
- * to sign in.
+ * Everyone lands on the dashboard — first-time or signed-out visitors included.
+ * The dashboard restores an existing session and, when there is none, shows its
+ * own sign-in prompt instead of bouncing the visitor to /sign-in.
  */
 export default function Home() {
   const router = useRouter();
-  const { user, isLoaded } = useCurrentUser();
 
   useEffect(() => {
-    if (!isLoaded) return;
-    router.replace(user ? "/dashboard" : "/sign-in");
-  }, [isLoaded, user, router]);
+    router.replace("/dashboard");
+  }, [router]);
 
   return (
     <div className="flex flex-1 items-center justify-center bg-zinc-50 text-sm text-zinc-500 dark:bg-zinc-950">

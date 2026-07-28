@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Card from "@/components/dashboard/card";
 import IntegrationCard from "@/components/dashboard/integration-card";
@@ -62,6 +61,19 @@ export default function IntegrationsPage() {
     message: string;
   } | null>(null);
 
+  // The provider list is public, but connecting needs an account. Signed-out
+  // visitors clicking Connect are sent to sign in rather than failing silently.
+  const requireAuth = useCallback(
+    (action: () => void) => {
+      if (!user) {
+        router.push("/sign-in");
+        return;
+      }
+      action();
+    },
+    [user, router],
+  );
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const code = params.get("int_error");
@@ -92,21 +104,6 @@ export default function IntegrationsPage() {
             <div key={provider.id} className="skeleton h-56 rounded-3xl" />
           ))}
         </div>
-      ) : !user ? (
-        <Card className="mx-auto max-w-md text-center">
-          <p className="text-sm font-semibold text-zinc-900 dark:text-white">
-            Sign in to manage your integrations
-          </p>
-          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-            Your connections are saved to your account.
-          </p>
-          <Link
-            href="/sign-in"
-            className="mt-4 inline-block rounded-lg bg-gradient-to-r from-violet-500 to-blue-500 px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-violet-500/25 transition-opacity hover:opacity-85"
-          >
-            Sign in
-          </Link>
-        </Card>
       ) : loadError ? (
         <Card className="mx-auto max-w-md text-center">
           <p className="text-sm text-rose-500">{loadError}</p>
@@ -134,8 +131,8 @@ export default function IntegrationsPage() {
               }
               onConnect={
                 provider.id === "whatsapp"
-                  ? () => setWhatsappPairing(true)
-                  : () => connect(provider.id)
+                  ? () => requireAuth(() => setWhatsappPairing(true))
+                  : () => requireAuth(() => connect(provider.id))
               }
               onDisconnect={() => disconnect(provider.id)}
               onOpenSettings={() => router.push(`/integrations/${provider.id}`)}
