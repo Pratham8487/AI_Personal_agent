@@ -22,6 +22,8 @@ export type SessionUser = {
   contactVerified: boolean;
   tourCompleted: boolean;
   active: boolean;
+  /** Throwaway "Try Demo" account; absent/false for every real account. */
+  isDemo?: boolean;
 };
 
 export type SessionMeta = { deviceInfo: string | null; ipAddress: string | null };
@@ -151,6 +153,7 @@ type UserRow = {
   contact_verified: boolean;
   tour_completed: boolean;
   active: boolean;
+  is_demo: boolean;
 };
 
 function toSessionUser(row: UserRow): SessionUser {
@@ -165,6 +168,7 @@ function toSessionUser(row: UserRow): SessionUser {
     contactVerified: row.contact_verified,
     tourCompleted: row.tour_completed,
     active: row.active,
+    isDemo: row.is_demo,
   };
 }
 
@@ -182,7 +186,8 @@ export async function getSessionUser(): Promise<SessionUser | null> {
   const candidates = await adminSql<UserRow>(
     `SELECT t.id AS token_id, t.token_hash, t.last_used_at,
             u.id, u.email, u.name, u.avatar_url, u.phone, u.providers,
-            u.email_verified, u.contact_verified, u.tour_completed, u.active
+            u.email_verified, u.contact_verified, u.tour_completed, u.active,
+            u.is_demo
      FROM public.user_access_tokens t
      JOIN public.users u ON u.id = t.user_id
      WHERE t.token_prefix = $1 AND t.revoked = false AND t.expires_at > now()

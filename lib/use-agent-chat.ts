@@ -28,6 +28,8 @@ export type AgentToolRun = {
 const GENERIC_ERROR = "Something went wrong while answering. Please retry.";
 const NOT_CONFIGURED =
   "The AI model isn't configured yet. Add OPENAI_API_KEY to .env.local to enable the agent.";
+const DEMO_LIMIT =
+  "You've reached the demo message limit. Sign up or log in to keep chatting with Aster.";
 
 function localId(): string {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -50,6 +52,8 @@ export function useAgentChat(userId: string | undefined) {
   const [loadedFor, setLoadedFor] = useState<string | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
   const [toolRuns, setToolRuns] = useState<AgentToolRun[]>([]);
+  /** Set once a demo account exhausts its message allowance. */
+  const [demoLimitReached, setDemoLimitReached] = useState(false);
   const conversationRef = useRef<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   // Mirrors isStreaming for guards that run before React re-renders.
@@ -158,9 +162,15 @@ export function useAgentChat(userId: string | undefined) {
         if (!res.ok || !res.body) {
           const body = (await res.json().catch(() => null)) as {
             code?: string;
+            error?: string;
           } | null;
-          failure =
-            body?.code === "not_configured" ? NOT_CONFIGURED : GENERIC_ERROR;
+          if (body?.code === "demo_limit_reached") {
+            setDemoLimitReached(true);
+            failure = body.error || DEMO_LIMIT;
+          } else {
+            failure =
+              body?.code === "not_configured" ? NOT_CONFIGURED : GENERIC_ERROR;
+          }
           return;
         }
 
@@ -293,6 +303,7 @@ export function useAgentChat(userId: string | undefined) {
     historyLoaded,
     isStreaming,
     toolRuns,
+    demoLimitReached,
     send,
     stop,
     newConversation,

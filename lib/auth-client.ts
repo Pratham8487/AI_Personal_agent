@@ -11,6 +11,8 @@ export type AuthUser = {
   contactVerified: boolean;
   tourCompleted: boolean;
   active: boolean;
+  /** True only for temporary "Try Demo" sessions. */
+  isDemo?: boolean;
 };
 
 type AuthResult = { user: AuthUser | null; error: string | null };
@@ -209,6 +211,36 @@ export async function updateProfile(patch: {
   } catch {
     return { user: null, error: "Network error. Please try again." };
   }
+}
+
+/** Starts a throwaway demo session — only a name is required. */
+export async function startDemo(name: string): Promise<AuthResult> {
+  return postJson("/api/auth/demo", { name: name.trim() });
+}
+
+/** Renews the demo TTL while the tab stays open. Fire-and-forget. */
+export function demoHeartbeat(): void {
+  void fetch("/api/auth/demo/heartbeat", {
+    method: "POST",
+    keepalive: true,
+  }).catch(() => {});
+}
+
+/**
+ * Best-effort "the tab is going away" signal. sendBeacon survives unload where
+ * fetch does not; the cookie rides along so the server reaps the demo user.
+ */
+export function demoClose(): void {
+  const url = "/api/auth/demo/close";
+  try {
+    if (typeof navigator !== "undefined" && navigator.sendBeacon) {
+      navigator.sendBeacon(url);
+      return;
+    }
+  } catch {
+    // fall through to fetch below
+  }
+  void fetch(url, { method: "POST", keepalive: true }).catch(() => {});
 }
 
 /** Same email rule the server enforces — used for inline form validation. */

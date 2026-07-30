@@ -1,6 +1,14 @@
 import { MAX_MESSAGE_CHARS, type AgentStreamEvent } from "@/lib/agent-protocol";
 import { runAgentChat } from "@/lib/server/agent/service";
 import { aiConfigured } from "@/lib/server/brief-ai";
+import {
+  DEMO_AGENT_FEATURE,
+  DEMO_AGENT_POLICY,
+} from "@/lib/server/demo";
+import {
+  getRefreshQuota,
+  recordRefresh,
+} from "@/lib/server/dashboard/refresh-limit";
 import { isUuid } from "@/lib/server/gmail-oauth";
 import { getSessionUser, unauthorized } from "@/lib/server/session";
 
@@ -36,6 +44,27 @@ export async function POST(request: Request) {
       { error: "AI model is not configured.", code: "not_configured" },
       { status: 503 },
     );
+  }
+
+  // Demo accounts get a small message allowance; real accounts are never gated
+  // here, so normal chat behaviour is unchanged. Counted per attempt.
+  if (user.isDemo) {
+    const quota = await getRefreshQuota(
+      user.id,
+      DEMO_AGENT_FEATURE,
+      DEMO_AGENT_POLICY,
+    );
+    if (quota.remaining <= 0) {
+      return Response.json(
+        {
+          error:
+            "You've reached the demo message limit. Sign up or log in to keep chatting with Aster.",
+          code: "demo_limit_reached",
+        },
+        { status: 429 },
+      );
+    }
+    await recordRefresh(user.id, DEMO_AGENT_FEATURE, DEMO_AGENT_POLICY);
   }
 
   const abort = new AbortController();

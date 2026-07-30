@@ -8,6 +8,7 @@ import {
   signIn,
   signInWithGitHub,
   signInWithGoogle,
+  startDemo,
   verifyLoginOtp,
 } from "@/lib/auth-client";
 import AuthCard from "./auth-card";
@@ -34,9 +35,12 @@ const RESEND_COOLDOWN_SECONDS = 60;
 
 export default function SignInForm() {
   const router = useRouter();
-  const [step, setStep] = useState<"credentials" | "otp">("credentials");
+  const [step, setStep] = useState<"credentials" | "otp" | "demo">(
+    "credentials",
+  );
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
   const [otp, setOtp] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(oauthCallbackError);
@@ -109,9 +113,30 @@ export default function SignInForm() {
     setStep("credentials");
     setOtp("");
     setPassword("");
+    setName("");
     setError(null);
     setNotice(null);
     setCooldown(0);
+  }
+
+  function handleTryDemo() {
+    setError(null);
+    setNotice(null);
+    setStep("demo");
+  }
+
+  /** Creates a throwaway demo account from just a name, then enters the app. */
+  async function handleStartDemo(event: React.FormEvent) {
+    event.preventDefault();
+    setError(null);
+    setPending(true);
+    const { user, error: demoError } = await startDemo(name);
+    if (!user) {
+      setError(demoError ?? "Could not start the demo. Please try again.");
+      setPending(false);
+      return;
+    }
+    router.replace("/");
   }
 
   if (step === "otp") {
@@ -156,6 +181,45 @@ export default function SignInForm() {
     );
   }
 
+  if (step === "demo") {
+    return (
+      <AuthCard
+        title="Try Aster free"
+        subtitle="No account needed — just tell us your name"
+      >
+        <form onSubmit={handleStartDemo} className="flex flex-col gap-4">
+          <FormError message={error} />
+          {/* Temporary-session warning: shown ONLY after choosing Try Demo. */}
+          <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3.5 py-3 text-sm text-amber-800 dark:text-amber-200">
+            <p className="font-semibold">This is a temporary demo session.</p>
+            <p className="mt-1 text-amber-800/90 dark:text-amber-200/90">
+              Your chats, connected apps, and any data are deleted the moment
+              you close this tab. Sign up anytime to keep your work.
+            </p>
+          </div>
+          <TextField
+            label="Your name"
+            type="text"
+            name="name"
+            autoComplete="given-name"
+            placeholder="Guest"
+            autoFocus
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+          />
+          <SubmitButton pending={pending}>Start demo</SubmitButton>
+          <button
+            type="button"
+            onClick={backToCredentials}
+            className="text-sm font-medium text-zinc-500 transition-colors hover:text-zinc-700 dark:hover:text-zinc-300"
+          >
+            ← Back to sign in
+          </button>
+        </form>
+      </AuthCard>
+    );
+  }
+
   function handleGoogle() {
     setError(null);
     signInWithGoogle(); // full-page redirect
@@ -185,6 +249,14 @@ export default function SignInForm() {
       <div className="flex flex-col gap-3">
         <GoogleButton onClick={handleGoogle} pending={pending} />
         <GitHubButton onClick={handleGitHub} pending={pending} />
+        <button
+          type="button"
+          onClick={handleTryDemo}
+          disabled={pending}
+          className="flex w-full items-center justify-center gap-2 rounded-lg border border-violet-500/40 bg-violet-500/10 px-4 py-2.5 text-sm font-semibold text-violet-700 transition-colors hover:bg-violet-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-violet-400/30 dark:text-violet-200 dark:hover:bg-violet-400/15"
+        >
+          Try Demo — no sign-up needed
+        </button>
       </div>
       <AuthDivider />
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">

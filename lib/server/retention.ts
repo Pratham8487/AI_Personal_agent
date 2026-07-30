@@ -1,3 +1,4 @@
+import { reapExpiredDemoUsers } from "./demo";
 import { adminSql } from "./db";
 
 /**
@@ -12,6 +13,9 @@ const LOG_RETENTION_DAYS = 30;
 const BRIEFING_RESULTS_KEPT = 30;
 
 export async function cleanupExpiredData(): Promise<void> {
+  // Backstop for demo sessions the tab-close beacon missed (e.g. the last demo
+  // user closed with no other demo traffic to trigger an opportunistic sweep).
+  await reapExpiredDemoUsers();
   await adminSql(
     `DELETE FROM public.whatsapp_messages
      WHERE sent_at < now() - make_interval(days => $1::int)`,

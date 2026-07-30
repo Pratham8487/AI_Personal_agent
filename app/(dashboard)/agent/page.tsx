@@ -46,6 +46,7 @@ export default function AgentPage() {
     historyLoaded,
     isStreaming,
     toolRuns,
+    demoLimitReached,
     send,
     stop,
     newConversation,
@@ -198,8 +199,33 @@ export default function AgentPage() {
           </button>
         )}
 
+        {demoLimitReached && (
+          <div className="mt-3 rounded-xl border border-violet-500/30 bg-violet-500/10 px-4 py-3 text-center text-sm text-violet-800 dark:text-violet-200">
+            <p className="font-semibold">
+              You&apos;ve reached the demo message limit.
+            </p>
+            <p className="mt-1 text-violet-800/90 dark:text-violet-200/90">
+              Sign up or log in to keep chatting and unlock all features.
+            </p>
+            <div className="mt-3 flex items-center justify-center gap-2">
+              <Link
+                href="/sign-up"
+                className="rounded-lg bg-gradient-to-r from-violet-500 to-blue-500 px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-violet-500/25 transition-opacity hover:opacity-85"
+              >
+                Sign up
+              </Link>
+              <Link
+                href="/sign-in"
+                className="rounded-lg border border-violet-500/40 px-4 py-2 text-xs font-semibold text-violet-700 transition-colors hover:bg-violet-500/10 dark:text-violet-200"
+              >
+                Log in
+              </Link>
+            </div>
+          </div>
+        )}
+
         <Composer
-          disabled={!user}
+          disabled={!user || demoLimitReached}
           isStreaming={isStreaming}
           onSend={submit}
           onStop={stop}
